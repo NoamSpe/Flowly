@@ -4,7 +4,6 @@ import random
 
 # Initialize Faker instance
 fake = fk()
-
 print(fake.date_this_month())
 
 # Define the labels
@@ -95,39 +94,39 @@ TASK_TEMPLATES = [
 ]
 
 LABELS = [
-    "B-Task,O,I-Task,I-Task,O,B-Date,I-Date,O,B-Time,I-Time",
+    "B-Task,O,B-Task,I-Task,O,B-Date,I-Date,O,B-Time,I-Time",
     "B-Task,I-Task,I-Task,B-Date,O,B-Time,I-Time",
-    "O,O,O,B-Task,O,I-Task,I-Task,I-Task,O,I-Task,O,B-Time,I-Time,B-Date",
-    "B-Task,I-Task,O,I-Task,I-Task,B-Date,I-Date,I-Date",
-    "B-Task,I-Task,O,O,I-Task,O,O,B-Date,I-Date,I-Date,O,B-Time,I-Time",
-    "B-Task,I-Task,I-Task,O,I-Task,O,B-Date,I-Date,O,B-Time,I-Time",
-    "B-Task,O,I-Task,I-Task,O,B-Time,O,B-Date",
-    "B-Task,O,I-Task,I-Task,I-Task,O,O,O,O,B-Date,I-Date,O,B-Time",
+    "O,O,O,B-Task,O,B-Task,I-Task,I-Task,O,B-Task,O,B-Time,I-Time,B-Date",
+    "B-Task,I-Task,O,B-Task,I-Task,B-Date,I-Date,I-Date",
+    "B-Task,I-Task,O,O,B-Task,O,O,B-Date,I-Date,I-Date,O,B-Time,I-Time",
+    "B-Task,I-Task,I-Task,O,B-Task,O,B-Date,I-Date,O,B-Time,I-Time",
+    "B-Task,O,B-Task,I-Task,O,B-Time,O,B-Date",
+    "B-Task,O,B-Task,I-Task,I-Task,O,O,O,O,B-Date,I-Date,O,B-Time",
     "O,O,O,B-Task,I-Task,I-Task,O,O,O,O,O,B-Date",
-    "B-Task,O,I-Task,I-Task,I-Task,O,B-Date,O,B-Time,I-Time",
+    "B-Task,O,B-Task,I-Task,I-Task,O,B-Date,O,B-Time,I-Time",
     "B-Task,I-Task,I-Task,B-Date,O,B-Time",
-    "O,O,O,B-Task,O,I-Task,I-Task,I-Task,I-Task,I-Task,O,B-Time,I-Time,B-Date",
+    "O,O,O,B-Task,O,B-Task,I-Task,I-Task,I-Task,I-Task,O,B-Time,I-Time,B-Date",
     "B-Task,I-Task,I-Task,I-Task,I-Task,O,B-Date,I-Date,O,B-Time,I-Time",
-    "B-Task,I-Task,O,O,I-Task,O,O,B-Date,I-Date,I-Date",
-    "B-Task,I-Task,I-Task,O,I-Task,O,B-Date,I-Date,O,B-Time",
+    "B-Task,I-Task,O,O,B-Task,O,O,B-Date,I-Date,I-Date",
+    "B-Task,I-Task,I-Task,O,B-Task,O,B-Date,I-Date,O,B-Time",
     "B-Task,I-Task,I-Task,I-Task,O,B-Time,I-Time,O,B-Date",
-    "B-Task,I-Task,O,I-Task,I-Task,I-Task,O,O,O,O,B-Date,I-Date,O,B-Time",
-    "O,O,O,B-Task,I-Task,I-Task,I-Task,O,I-Task,I-Task,O,B-Date",
+    "B-Task,I-Task,O,B-Task,I-Task,I-Task,O,O,O,O,B-Date,I-Date,O,B-Time",
+    "O,O,O,B-Task,I-Task,I-Task,I-Task,O,B-Task,I-Task,O,B-Date",
     "O,O,O,B-Task,I-Task,I-Task,O,B-Date",
-    "B-Task,O,I-Task,I-Task,O,I-Task,I-Task,O,O,O,B-Date,O,B-Time",
-    "B-Task,O,I-Task,B-Date",
-    "B-Task,I-Task,O,I-Task,I-Task,O,B-Date",
+    "B-Task,O,B-Task,I-Task,O,B-Task,I-Task,O,O,O,B-Date,O,B-Time",
+    "B-Task,O,B-Task,B-Date",
+    "B-Task,I-Task,O,B-Task,I-Task,O,B-Date",
     "B-Task,I-Task,I-Task,I-Task,I-Task,O,B-Date,O,B-Time",
-    "O,O,O,B-Task,O,I-Task,I-Task,I-Task,O,B-Date,O,B-Time,I-Time",
+    "O,O,O,B-Task,O,B-Task,I-Task,I-Task,O,B-Date,O,B-Time,I-Time",
     "O,O,O,B-Task,I-Task,O,O,B-Date,I-Date,I-Date,O,B-Time",
-    "O,O,O,B-Task,O,I-Task,I-Task,O,B-Date,O,B-Time",
+    "O,O,O,B-Task,O,B-Task,I-Task,O,B-Date,O,B-Time",
     "B-Task,I-Task,I-Task,I-Task,O,B-Date,I-Date",  # Existing 27 labels
-    "O,O,O,B-Task,I-Task,O,I-Task,I-Task,O,B-Date,O,B-Time"  # Added for template 28
+    "O,O,O,B-Task,I-Task,O,B-Task,I-Task,O,B-Date,O,B-Time"  # Added for template 28
 ]
 
 data = []
 
-for _ in range(10):
+for _ in range(5000):
     # Randomly choose an hour in the format hh:mm (12-hour format)
     time = f"{random.randint(1, 12)}:{random.choice([0, 15, 30, 45]):02}"
     person_choice = random.choice(person_list + [fake.first_name()])
@@ -159,5 +158,5 @@ for _ in range(10):
     data.append({"Task":task, "Label":label})
 
 df = pd.DataFrame(data)
-df.save_csv('NER_Data.csv')
+df.to_csv("NER_Data.csv", index=False)
 print("data saved to 'NER_Data.csv'")
