@@ -1,9 +1,12 @@
-import asyncio
-import websockets
-import json
+import socket
+import threading
+from database import Database
+
 import torch
 import torch.nn as nn
 from TorchCRF import CRF
+from collections import defaultdict
+import pickle
 
 # ---------------------------------------- LOADING NER MODEL ----------------------------------------
 # Model definition
@@ -28,6 +31,7 @@ class BiLSTM_NER(nn.Module):
         else:  # Prediction
             return self.crf.viterbi_decode(emissions, mask=mask)
 
+MAX_SEQUENCE_LENGTH = 25
 EMBEDDING_DIM = 100
 VOCAB_SIZE = 8000
 HIDDEN_DIM = 64
@@ -38,53 +42,81 @@ NerModel.load_state_dict(torch.load('NERModel.pth'))
 NerModel.eval()
 
 
+# Load label mappings
+label2idx = {label: idx for idx, label in enumerate(LABELS)}
+idx2label = {idx: label for label, idx in label2idx.items()}
+
+# Load tokenizer (add this after model loading)
+with open('NERtokenizer.pkl', 'rb') as f:  # saved during training
+    tokenizer_dict = pickle.load(f)
+tokenizer = defaultdict(lambda: 1, tokenizer_dict)
+
+def NER_predict(sentence):
+    tokens = [tokenizer[word.strip().lower()] for word in sentence.split()]
+    padded = tokens + [0] * (MAX_SEQUENCE_LENGTH - len(tokens))
+    input_tensor = torch.tensor([padded], dtype=torch.long)
+    mask = (input_tensor != 0)
+    with torch.no_grad():
+        preds = NerModel(input_tensor, mask=mask)[0]  # CRF decode returns list
+    return [idx2label[idx] for idx in preds[:len(tokens)]]
+
 # ---------------------------------------- SERVER ----------------------------------------
 
-# Simulate model prediction (replace with actual model)
-def predict_categoty(task_name, task_date, task_time):
-    category = "work"  # Example mock prediction
-    return category
+class TaskServer:
+    def __init__(self, host='127.0.0.1', port=65432):
+        self.host = host
+        self.port = port
+        self.db = Database()
+        self._setup_server()
 
-def predict_urgency(task_name, task_date, task_time, task_category):
-    urgency = "medium"  # Example mock prediction
-    return category
+    def _setup_server(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # allow reuse of local addresses
+        self.sock.bind((self.host, self.port))
+        self.sock.listen()
+        print(f"Server listening on {self.host}:{self.port}")
 
-async def handle_task_description(websocket, path):
-    try:
-        # Receive data from the client (task details)
-        task_data = await websocket.recv()
-        task_labels = NerModel(task_data)
+    def handle_client(self, conn):
+        try:
+            data = conn.recv(1024).decode('utf-8')
+            user_id, task_desc = data.split('|', 1)
+            print("got data!", task_desc)
+            
+            # Process with NER
+            prediction = NER_predict(task_desc)
+            print(task_data)
+            task_data = {
+                'TaskDesc': [word for ind, word in enumerate(task_desc) if prediction[ind] in ['B-Task', 'I-Task']],
+                'Date': [word for ind, word in enumerate(task_desc) if prediction[ind] in ['B-Date', 'I-Date']],
+                'Time': [word for ind, word in enumerate(task_desc) if prediction[ind] in ['B-Time', 'I-Time']],
+                'Category': 'Household', # change when category prediction is implemented
+                'Urgency': 3 # change when urgency prediction is implemented
+            }
+            print(task_data)
+            
+            # Store in database
+            self.db.create_task(
+                user_id=int(user_id),
+                task_desc=task_desc,
+                **task_data
+            )
+            print("task stored in database!")
+            
+            conn.send(b"Task processed successfully")
+        except Exception as e:
+            conn.send(f"Error: {str(e)}".encode())
+        finally:
+            conn.close()
 
-        task_name = [x for x in task_labels if x in ['B-Task', 'I-Task']]
-        task_date = [x for x in task_labels if x in ['B-Date', 'I-Date']]
-        task_time = [x for x in task_labels if x in ['B-Time', 'I-Time']]
-        
-        # Get predictions from the "model"
-        task_category = predict_categoty (task_name, task_date, task_time)
-        task_urgency = predict_categoty (task_name, task_date, task_time, task_urgency)
-        
-        # Create a response with predicted properties
-        response = {
-            "category": task_category,
-            "urgency": task_urgency,
-            "task_name": task_name,
-            "task_date": task_date,
-            "task_time": task_time
-        }
-        
-        # Send the response back to the client
-        await websocket.send(json.dumps(response))
-        
-    except Exception as e:
-        # Handle errors
-        print(f"Error: {e}")
+    def run(self):
+        while True:
+            conn, addr = self.sock.accept()
+            print(f"Connected by {addr}")
+            client_thread = threading.Thread(
+                target=self.handle_client, args=(conn,)
+            )
+            client_thread.start()
 
-# Start the WebSocket server
-async def main():
-    server = await websockets.serve(handle_task_request, "localhost", 8765)
-    print("WebSocket server started on ws://localhost:8765")
-    await server.wait_closed()
-
-# Run the WebSocket server
 if __name__ == "__main__":
-    asyncio.run(main())
+    server = TaskServer()
+    server.run()

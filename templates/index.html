@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Flowly</title>
+</head>
+<body>
+    <input type="text" id="taskInput" placeholder="Enter task...">
+    <button onclick="sendTask()">Add Task</button>
+
+    <script>
+        async function sendTask() {
+            const task = document.getElementById('taskInput').value;
+            const userId = 1;  // Normally get from session
+            
+            try {
+                const response = await fetch('http://localhost:65432', {
+                    method: 'POST',
+                    body: `${userId}|${task}`
+                });
+                
+                const result = await response.text();
+                alert(result);
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+    </script>
+</body>
+</html>
