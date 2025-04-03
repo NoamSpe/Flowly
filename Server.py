@@ -82,39 +82,45 @@ class TaskServer:
     def handle_client(self, conn):
         print("starting handling")
         try:
-            task_desc = conn.recv(1024).decode('utf-8')
-            print("got data!", task_desc)
-            
-            # Process with NER
-            prediction = NER_predict(task_desc)
-            print(prediction)
-            DateExp = ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Date', 'I-Date']])
-            if DateExp: Date = dp.parse(DateExp, languages=['en'], settings={'DATE_ORDER': 'DMY', 'PREFER_DATES_FROM': 'future'}).date()
-            else: Date = ''
-            TimeExp = ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Time', 'I-Time']])
-            if TimeExp: Time = dp.parse(TimeExp, languages=['en'], settings={'DATE_ORDER': 'DMY', 'PREFER_DATES_FROM': 'future'}).time()
-            else: Time = ''
-            task_data = {
-                'TaskDesc': ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Task', 'I-Task']]),
-                'Date': str(Date),
-                'Time': str(Time),
-                'Category': 'General', # change when category prediction is implemented
-                'Urgency': 3 # change when urgency prediction is implemented
-            }
-            print(task_data)
-            
-            # Store in database
-            self.db.create_task(
-                user_id=int(1),
-                **task_data
-            )
-            print("task stored in database!")
-            
-            conn.send(b"Task processed successfully")
+            while True:
+                task_desc = conn.recv(1024).decode('utf-8')
+                if not task_desc:
+                    print("client disconnected")
+                    break
+
+                print("got data!", task_desc)
+
+                # Process with NER
+                prediction = NER_predict(task_desc)
+                print(prediction)
+                DateExp = ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Date', 'I-Date']])
+                if DateExp: Date = dp.parse(DateExp, languages=['en'], settings={'DATE_ORDER': 'DMY', 'PREFER_DATES_FROM': 'future'}).date()
+                else: Date = ''
+                TimeExp = ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Time', 'I-Time']])
+                if TimeExp: Time = dp.parse(TimeExp, languages=['en'], settings={'DATE_ORDER': 'DMY', 'PREFER_DATES_FROM': 'future'}).time()
+                else: Time = ''
+                task_data = {
+                    'TaskDesc': ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Task', 'I-Task']]),
+                    'Date': str(Date),
+                    'Time': str(Time),
+                    'Category': 'General', # change when category prediction is implemented
+                    'Urgency': 3 # change when urgency prediction is implemented
+                }
+                print(task_data)
+
+                # Store in database
+                self.db.create_task(
+                    user_id=int(1),
+                    **task_data
+                )
+                print("task stored in database!")
+
+                conn.send(b"Task processed successfully")
         except Exception as e:
             conn.send(f"Error: {str(e)}".encode())
         finally:
             conn.close()
+            print("connection closed")
 
     def run(self):
         while True:
