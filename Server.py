@@ -1,6 +1,7 @@
 import socket
 import threading
 from database import Database
+import dateparser as dp
 
 import torch
 import torch.nn as nn
@@ -87,10 +88,16 @@ class TaskServer:
             # Process with NER
             prediction = NER_predict(task_desc)
             print(prediction)
+            DateExp = ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Date', 'I-Date']])
+            if DateExp: Date = dp.parse(DateExp, languages=['en'], settings={'DATE_ORDER': 'DMY', 'PREFER_DATES_FROM': 'future'}).date()
+            else: Date = ''
+            TimeExp = ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Time', 'I-Time']])
+            if TimeExp: Time = dp.parse(TimeExp, languages=['en'], settings={'DATE_ORDER': 'DMY', 'PREFER_DATES_FROM': 'future'}).time()
+            else: Time = ''
             task_data = {
                 'TaskDesc': ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Task', 'I-Task']]),
-                'Date': ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Date', 'I-Date']]),
-                'Time': ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Time', 'I-Time']]),
+                'Date': str(Date),
+                'Time': str(Time),
                 'Category': 'General', # change when category prediction is implemented
                 'Urgency': 3 # change when urgency prediction is implemented
             }
