@@ -27,7 +27,7 @@ class Database:
                 )
             ''')
             
-            # create Tasks table
+            # create Tasks table #### add status (pending/done)
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS Tasks (
                     TaskID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,27 +37,25 @@ class Database:
                     Time TIME,
                     Category TEXT,
                     Urgency INTEGER,
-                    Status TEXT DEFAULT 'Pending',
                     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY(UserID) REFERENCES Users(UserID)
                 )
             ''')
 
-    def create_task(self, user_id, task_desc, **kwargs):
+    def create_task(self, user_id, **kwargs):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO Tasks 
-                (UserID, TaskDesc, Date, Time, Category, Urgency, Status)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (UserID, TaskDesc, Date, Time, Category, Urgency)
+                VALUES (?, ?, ?, ?, ?, ?)
             ''', (
                 user_id,
-                task_desc,
+                kwargs.get('TaskDesc'),
                 kwargs.get('Date'),
                 kwargs.get('Time'),
                 kwargs.get('Category'),
-                kwargs.get('Urgency'),
-                kwargs.get('Status')
+                kwargs.get('Urgency')
             ))
             conn.commit()
