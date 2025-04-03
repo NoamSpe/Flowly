@@ -52,6 +52,7 @@ with open('NERtokenizer.pkl', 'rb') as f:  # saved during training
 tokenizer = defaultdict(lambda: 1, tokenizer_dict)
 
 def NER_predict(sentence):
+    print("start predicting")
     tokens = [tokenizer[word.strip().lower()] for word in sentence.split()]
     padded = tokens + [0] * (MAX_SEQUENCE_LENGTH - len(tokens))
     input_tensor = torch.tensor([padded], dtype=torch.long)
@@ -59,11 +60,12 @@ def NER_predict(sentence):
     with torch.no_grad():
         preds = NerModel(input_tensor, mask=mask)[0]  # CRF decode returns list
     return [idx2label[idx] for idx in preds[:len(tokens)]]
+    
 
 # ---------------------------------------- SERVER ----------------------------------------
 
 class TaskServer:
-    def __init__(self, host='127.0.0.1', port=65432):
+    def __init__(self, host='127.0.0.1', port=4320):
         self.host = host
         self.port = port
         self.db = Database()
@@ -77,27 +79,26 @@ class TaskServer:
         print(f"Server listening on {self.host}:{self.port}")
 
     def handle_client(self, conn):
+        print("starting handling")
         try:
-            data = conn.recv(1024).decode('utf-8')
-            user_id, task_desc = data.split('|', 1)
+            task_desc = conn.recv(1024).decode('utf-8')
             print("got data!", task_desc)
             
             # Process with NER
             prediction = NER_predict(task_desc)
-            print(task_data)
+            print(prediction)
             task_data = {
-                'TaskDesc': [word for ind, word in enumerate(task_desc) if prediction[ind] in ['B-Task', 'I-Task']],
-                'Date': [word for ind, word in enumerate(task_desc) if prediction[ind] in ['B-Date', 'I-Date']],
-                'Time': [word for ind, word in enumerate(task_desc) if prediction[ind] in ['B-Time', 'I-Time']],
-                'Category': 'Household', # change when category prediction is implemented
+                'TaskDesc': ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Task', 'I-Task']]),
+                'Date': ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Date', 'I-Date']]),
+                'Time': ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Time', 'I-Time']]),
+                'Category': 'General', # change when category prediction is implemented
                 'Urgency': 3 # change when urgency prediction is implemented
             }
             print(task_data)
             
             # Store in database
             self.db.create_task(
-                user_id=int(user_id),
-                task_desc=task_desc,
+                user_id=int(1),
                 **task_data
             )
             print("task stored in database!")
