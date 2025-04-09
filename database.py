@@ -95,7 +95,25 @@ class Database:
             cursor.execute("DELETE FROM Tasks WHERE TaskID = ?", (task_id,))
             conn.commit()
 
-    # In database.py, add these methods to the Database class
+    def get_user_by_email(self, email):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT UserID, Username, PasswordHash 
+                FROM Users 
+                WHERE LOWER(TRIM(Email)) = LOWER(TRIM(?))
+            """, (email,))
+            return cursor.fetchone()
+
+    def get_task(self, task_id):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT TaskID, UserID, TaskDesc, Date, Time, Category, Urgency, Status 
+                FROM Tasks 
+                WHERE TaskID = ?
+            """, (task_id,))
+            return cursor.fetchone()
 
     def create_user(self, username, email, password_hash):
         with self._get_connection() as conn:
