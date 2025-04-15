@@ -631,23 +631,22 @@ class FlowlyApp(QWidget):
          if self.logged_in_user:
               confirm = QMessageBox.question(self, "Confirm Logout", f"Log out?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
               if confirm == QMessageBox.Yes:
-                   print(f"Logging out user {self.logged_in_user}")
-                   # Store username before clearing
-                   logged_out_user = self.logged_in_user
-                   self.logged_in_user = None
-                   # Inform worker user is gone - send empty string
-                   self.set_worker_user.emit("")
-                   # Optionally close/reset connection
-                   self.network_worker.close_connection() # Let's close it on logout
-
-                   # Clear UI immediately
-                   self.task_list.clear()
-                   self.setWindowTitle("Flowly - Task Manager")
-                   self.status_label.setText("Status: Logged out.")
-                   self.hide() # Hide main window
+                    print(f"Logging out user {self.logged_in_user}")
+                    # Store username before clearing
+                    logged_out_user = self.logged_in_user
+                    self.logged_in_user = None
+                    # Inform worker user is gone - send empty string
+                    self.set_worker_user.emit("")
+                    # Optionally close/reset connection
+                    self.network_worker.close_connection() # Let's close it on logout   
+                    # Clear UI immediately
+                    self.task_list.clear()
+                    self.setWindowTitle("Flowly - Task Manager")
+                    self.status_label.setText("Status: Logged out.")
+                    self.hide() # Hide main window
 
                    # Use QTimer to show login dialog AFTER current event processing
-                   QTimer.singleShot(0, self.showLogin)
+                    QTimer.singleShot(0, self.showLogin)
 
     # --- closeEvent Method (Keep As Is) ---
     def closeEvent(self, event):

@@ -6,6 +6,7 @@ import json
 import pickle
 import dateparser as dp
 import bcrypt # <-- Import bcrypt
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -13,7 +14,9 @@ from TorchCRF import CRF
 from collections import defaultdict
 
 
-# Model definition
+# Models definition
+
+# --- NER Model ---
 class BiLSTM_NER(nn.Module):
     def __init__(self, vocab_size, embedding_dim, hidden_dim, num_classes):
         super(BiLSTM_NER, self).__init__()
@@ -65,7 +68,11 @@ def NER_predict(sentence):
         preds = NerModel(input_tensor, mask=mask)[0]  # CRF decode returns list
     return [idx2label[idx] for idx in preds[:len(tokens)]]
     
-
+# --- Category Classifier Model ---
+with open('CategoryClassifier_Model.pkl', 'rb') as f:
+    CatClassifier = pickle.load(f)
+with open('CategoryClassifier_Vectorizer.pkl', 'rb') as f:
+    CatVectorizer = pickle.load(f)
 
 
 # ---------------------------------------- SERVER ----------------------------------------
@@ -252,13 +259,17 @@ class TaskServer:
                             except Exception as dp_err:
                                 print(f"WARN: Time parsing failed for '{time_str_raw}': {dp_err}")
 
+                            # Classify for Category
+                            vectorized_task_desc = CatVectorizer.transform([task_desc_raw])
+                            predicted_category = CatClassifier.predict(vectorized_task_desc)
+                            predicted_category = None if np.max(CatClassifier.predict_proba(vectorized_task_desc)) < 0.3 else str(predicted_category[0])
 
                             task_data = {
                                 'TaskDesc': task_desc_processed if task_desc_processed else task_desc_raw, # Fallback to raw if NER fails
                                 'Date': str(date_obj) if date_obj else None,
                                 'Time': str(time_obj) if time_obj else None,
-                                'Category': request.get('Category', 'General'), # Allow override or default
-                                'Urgency': request.get('Urgency', 3),        # Allow override or default
+                                'Category': predicted_category, 
+                                'Urgency': request.get('Urgency', 3),   # Allow override or default
                                 'Status': 'pending' # Always start as pending
                             }
                             print(f"Processed task data: {task_data}")
