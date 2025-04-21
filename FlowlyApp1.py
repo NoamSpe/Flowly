@@ -15,6 +15,8 @@ import pyaudio # Implicitly used by sr.Microphone
 import pyttsx3
 import json
 import time
+import datetime
+import math
 
 # --- NetworkWorker Class (Keep As Is) ---
 # No changes needed here based on the current problem
@@ -209,6 +211,23 @@ class FlowlyApp(QWidget):
         self.setWindowTitle("Flowly - Task Manager")
         self.setGeometry(200, 200, 700, 500)
 
+        # urgency sorting factors setup
+        self.CATEGORY_FACTORS = {
+            "Work":0.8,
+            "School":0.65,
+            "Personal":0.6,
+            "Household":0.4,
+            "Health":0.7,
+            "_default_":0.5 # Default for unknown categories
+        }
+        self.DTIME_WEIGHT = 0.6
+        self.CATEGORY_WEIGHT = 0.4
+        self.TIME_URGENCY_K=0.05
+        self.DF_TIME = 0.1
+
+        self.current_sort_mode = "datetime"
+        self.tasks_cache = []
+
         # --- Network Thread Setup ---
         self.network_thread = QThread()
         self.network_worker = NetworkWorker('127.0.0.1', 4320)
@@ -247,6 +266,15 @@ class FlowlyApp(QWidget):
         self.sendTask_btn = QPushButton("Add Task"); self.sendTask_btn.clicked.connect(self.send_task)
         self.record_btn = QPushButton("Record"); self.record_btn.clicked.connect(self.record_task)
         input_layout.addWidget(self.text_field, 1); input_layout.addWidget(self.sendTask_btn); input_layout.addWidget(self.record_btn)
+        # Sort Control
+        sort_layout = QHBoxLayout()
+        sort_label = QLabel("Sort by:")
+        self.sort_combo = QComboBox()
+        self.sort_combo.addItems(["Due Date", "Urgency"])
+        self.sort_combo.currentIndexChanged.connect(self.change_sort_mode)
+        sort_layout.addStretch() # Push to the right
+        sort_layout.addWidget(sort_label)
+        sort_layout.addWidget(self.sort_combo)
         # Task List
         self.task_list = QListWidget(); self.task_list.setSelectionMode(QListWidget.NoSelection)
         self.task_list.setFocusPolicy(Qt.NoFocus); self.task_list.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -261,7 +289,7 @@ class FlowlyApp(QWidget):
         self.status_label = QLabel("Status: Initializing...")
         self.status_label.setStyleSheet("color: gray;")
         # Add layouts/widgets
-        self.layout.addLayout(input_layout); self.layout.addWidget(self.task_list)
+        self.layout.addLayout(input_layout); self.layout.addLayout(sort_layout); self.layout.addWidget(self.task_list)
         self.layout.addLayout(button_layout); self.layout.addWidget(self.status_label)
         # Window starts hidden by default
 
@@ -424,8 +452,9 @@ class FlowlyApp(QWidget):
         elif self.logged_in_user:
             if action == 'get_tasks' and status == 'success':
                 print("DEBUG: Handling get_tasks response.")
-                self.populate_task_list(response.get('tasks', []))
-                if not self.is_request_pending: self.status_label.setText(f"Tasks loaded.")
+                tasks = response.get('tasks', [])
+                self.sort_and_display_tasks(tasks)
+                if not self.is_request_pending: self.status_label.setText(f"Tasks loaded ({len(tasks)}). sorted by {self.current_sort_mode.replace('_', ' ').title()}")
             elif action == 'add_task' and status == 'task_added':
                 QMessageBox.information(self, "Success", message or "Task added.")
                 self.request_get_tasks() # Refresh
@@ -438,6 +467,9 @@ class FlowlyApp(QWidget):
             elif action == 'delete_task' and status == 'task_deleted':
                  QMessageBox.information(self, "Success", f"Task deleted.")
                  self.request_get_tasks() # Refresh
+            elif action in ['add_task', 'update_task_status', 'update_task', 'delete_task'] and 'success' in status or 'updated' in status or 'deleted' in status:
+                 QMessageBox.information(self, "Success", response.get('message', f"Action {action} successful."))
+                 self.request_get_tasks()
             # Handle get_task response for editing
             elif action == 'get_task' and status == 'success' and 'task' in response:
                  if hasattr(self, '_editing_task_id') and self._editing_task_id == response['task'].get('TaskID'):
@@ -491,7 +523,112 @@ class FlowlyApp(QWidget):
         elif not self.logged_in_user and self.status_label.text().startswith("Working..."):
              self.status_label.setText(f"Status: Please log in or sign up.")
 
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+    def change_sort_mode(self, index):
+        mode = self.sort_combo.currentText().lower().replace(" ", "_") # "due_date" or "urgency"
+        if mode != self.current_sort_mode:
+            self.current_sort_mode = mode
+            print(f"DEBUG: Sort mode changed to {self.current_sort_mode}")
+            self.sort_and_display_tasks(self.tasks_cache)
+    
+    def calculate_urgency(self, task_data):
+        """Calculates dynamic urgency score for a single task."""
+        # Unpack carefully, assuming task_data tuple structure:
+        # (TaskID, TaskDesc, DateStr, TimeStr, Category, UrgencyDB, Status)
+        try:
+            _, _, date_str, time_str, category, _, _ = task_data
+        except ValueError:
+            print(f"WARN: Could not unpack task data for urgency: {task_data}")
+            return 0 # Or some default low score
 
+        now = datetime.datetime.now()
+        due_datetime = None
+
+        # --- Combine Date and Time ---
+        if date_str and date_str != 'None':
+            try:
+                parsed_date = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+                parsed_time = datetime.time.min # Default to start of day
+                if time_str and time_str != 'None':
+                    try:
+                        # Handle potential microseconds if your DB stores them
+                        time_str_clean = time_str.split('.')[0]
+                        parsed_time = datetime.datetime.strptime(time_str_clean, '%H:%M:%S').time()
+                    except ValueError:
+                        print(f"WARN: Invalid time format '{time_str}', using 00:00:00")
+                due_datetime = datetime.datetime.combine(parsed_date, parsed_time)
+            except ValueError:
+                print(f"WARN: Invalid date format '{date_str}', cannot determine due date.")
+
+        # --- Calculate TimeFactor ---
+        time_factor = self.DF_TIME
+        if due_datetime:
+            delta = due_datetime - now
+            delta_hours = delta.total_seconds() / 3600.0
+            if delta_hours <= 0: # Overdue or due now
+                time_factor = 1.0
+            else:
+                time_factor = math.exp(-self.TIME_URGENCY_K * delta_hours)
+
+        # --- Calculate CategoryFactor ---
+        category_factor = self.CATEGORY_FACTORS.get(category, self.CATEGORY_FACTORS["_default_"]) if category else self.CATEGORY_FACTORS["_default_"]
+
+        # --- Final Score ---
+        urgency_score = (self.DTIME_WEIGHT * time_factor) + (self.CATEGORY_WEIGHT * category_factor)
+        # print(f"DEBUG: TaskID {task_data[0]}, Due: {due_datetime}, DeltaH: {delta_hours if due_datetime else 'N/A'}, TF: {time_factor:.3f}, CF: {category_factor:.3f}, Score: {urgency_score:.3f}")
+        return urgency_score
+
+    def sort_and_display_tasks(self, tasks):
+        """Sorts the raw task data based on current mode and updates list."""
+        self.tasks_cache = tasks # Update cache
+        print(f"DEBUG: Sorting {len(tasks)} tasks by {self.current_sort_mode}")
+
+        if not tasks:
+            self.populate_task_list([]) # Clear list if no tasks
+            return
+
+        sorted_tasks = []
+        if self.current_sort_mode == "urgency":
+            # Create list of (score, task_data) tuples for sorting
+            tasks_with_scores = []
+            for task in tasks:
+                score = self.calculate_urgency(task)
+                tasks_with_scores.append((score, task))
+            # Sort descending by score
+            tasks_with_scores.sort(key=lambda item: item[0], reverse=True)
+            sorted_tasks = [item[1] for item in tasks_with_scores] # Extract sorted task data
+
+        elif self.current_sort_mode == "due_date":
+            # Sort by date, time (earliest first). Handle None values (put them last).
+            def get_sort_key(task):
+                # TaskID, TaskDesc, DateStr, TimeStr, Category, UrgencyDB, Status
+                date_str = task[2]
+                time_str = task[3]
+                # Represent tasks with no date/time as very far in the future
+                far_future_datetime = datetime.datetime.max
+
+                if date_str and date_str != 'None':
+                    try:
+                        parsed_date = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+                        parsed_time = datetime.time.min
+                        if time_str and time_str != 'None':
+                             try:
+                                 time_str_clean = time_str.split('.')[0]
+                                 parsed_time = datetime.datetime.strptime(time_str_clean, '%H:%M:%S').time()
+                             except ValueError: pass # Keep min time
+                        return datetime.datetime.combine(parsed_date, parsed_time)
+                    except ValueError:
+                        return far_future_datetime # Invalid date format -> last
+                else:
+                    return far_future_datetime # No date -> last
+
+            sorted_tasks = sorted(tasks, key=get_sort_key)
+        else: # Default or unknown sort
+            sorted_tasks = tasks # Keep original order
+
+        self.populate_task_list(sorted_tasks)
+
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # --- set_controls_enabled Method ---
     def set_controls_enabled(self, enabled):
         self.sendTask_btn.setEnabled(enabled); self.record_btn.setEnabled(enabled)
@@ -504,12 +641,13 @@ class FlowlyApp(QWidget):
         self.set_controls_enabled(False)
 
     # --- populate_task_list Method (Keep As Is) ---
-    def populate_task_list(self, tasks):
+    def populate_task_list(self, sorted_tasks):
         self.task_list.clear()
-        if not tasks:
+        if not sorted_tasks:
             item = QListWidgetItem("No tasks found."); item.setFlags(Qt.NoItemFlags); self.task_list.addItem(item)
             return
-        for task_data in tasks:
+        print(f"DEBUG: Populating task list with {len(sorted_tasks)} sorted tasks.")
+        for task_data in sorted_tasks:
             try:
                 task_id, desc, date, time, cat, urg, stat = task_data # Unpack carefully
                 task_widget = TaskItemWidget(task_id, desc, date, time, cat, urg, stat)
@@ -638,14 +776,14 @@ class FlowlyApp(QWidget):
                     # Inform worker user is gone - send empty string
                     self.set_worker_user.emit("")
                     # Optionally close/reset connection
-                    self.network_worker.close_connection() # Let's close it on logout   
+                    # self.network_worker.close_connection()  
                     # Clear UI immediately
                     self.task_list.clear()
                     self.setWindowTitle("Flowly - Task Manager")
                     self.status_label.setText("Status: Logged out.")
                     self.hide() # Hide main window
 
-                   # Use QTimer to show login dialog AFTER current event processing
+                    # Use QTimer to show login dialog AFTER current event processing
                     QTimer.singleShot(0, self.showLogin)
 
     # --- closeEvent Method (Keep As Is) ---

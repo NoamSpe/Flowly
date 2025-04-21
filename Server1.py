@@ -408,8 +408,7 @@ class TaskServer:
             # print(f"Sent: {response_data}") # Optional: Debug logging
         except (OSError, ConnectionResetError, BrokenPipeError) as e:
             print(f"ERROR: Failed to send response: {e} - Data: {response_data}")
-
-
+    
     def run(self):
         while True:
             try:
