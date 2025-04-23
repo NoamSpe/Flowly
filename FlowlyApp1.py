@@ -19,7 +19,6 @@ import datetime
 import math
 
 # --- NetworkWorker Class (Keep As Is) ---
-# No changes needed here based on the current problem
 class NetworkWorker(QObject):
     response_received = pyqtSignal(dict)
     error_occurred = pyqtSignal(str)
@@ -162,7 +161,6 @@ class NetworkWorker(QObject):
                 finally: self.client_socket = None; self.is_connected = False; self.current_user = None
 
 # --- TaskItemWidget Class (Keep As Is) ---
-# No changes needed here
 class TaskItemWidget(QWidget):
     status_changed = pyqtSignal(int, bool) # task_id, is_done
     edit_requested = pyqtSignal(int)       # task_id
@@ -214,15 +212,15 @@ class FlowlyApp(QWidget):
         # urgency sorting factors setup
         self.CATEGORY_FACTORS = {
             "Work":0.8,
-            "School":0.65,
-            "Personal":0.6,
-            "Household":0.4,
+            "School":0.6,
+            "Personal":0.5,
+            "Household":0.3,
             "Health":0.7,
             "_default_":0.5 # Default for unknown categories
         }
         self.DTIME_WEIGHT = 0.6
         self.CATEGORY_WEIGHT = 0.4
-        self.TIME_URGENCY_K=0.05
+        self.TIME_URGENCY_K=0.01
         self.DF_TIME = 0.1
 
         self.current_sort_mode = "datetime"
