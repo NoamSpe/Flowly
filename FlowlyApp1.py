@@ -17,8 +17,9 @@ import json
 import time
 import datetime
 import math
+import ssl
 
-# --- NetworkWorker Class (Keep As Is) ---
+# --- NetworkWorker Class ---
 class NetworkWorker(QObject):
     response_received = pyqtSignal(dict)
     error_occurred = pyqtSignal(str)
@@ -41,7 +42,12 @@ class NetworkWorker(QObject):
                 try: self.client_socket.close()
                 except Exception: pass
             try:
-                self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+                context.load_verify_locations('server.crt')
+
+                plain_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.client_socket = context.wrap_socket(plain_sock, server_hostname=self.host)
+
                 self.client_socket.settimeout(10.0)
                 self.client_socket.connect((self.host, self.port))
                 self.is_connected = True
@@ -160,7 +166,7 @@ class NetworkWorker(QObject):
                 except (socket.error, OSError) as e: print(f"WARN: Error closing socket: {e}")
                 finally: self.client_socket = None; self.is_connected = False; self.current_user = None
 
-# --- TaskItemWidget Class (Keep As Is) ---
+# --- TaskItemWidget Class ---
 class TaskItemWidget(QWidget):
     status_changed = pyqtSignal(int, bool) # task_id, is_done
     edit_requested = pyqtSignal(int)       # task_id
@@ -203,9 +209,15 @@ class FlowlyApp(QWidget):
     request_network_action = pyqtSignal(dict)
     set_worker_user = pyqtSignal(str) # Signal to set user in worker
 
+    update_record_button = pyqtSignal(bool, str) # (enabled, text)
+    update_status = pyqtSignal(str)
+    update_text_field = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         self.recognizer = sr.Recognizer()
+        self.recognizer.pause_threshold = 1.3
+        self.recognizer.energy_threshold = 4000
         self.setWindowTitle("Flowly - Task Manager")
         self.setGeometry(200, 200, 700, 500)
 
@@ -246,6 +258,10 @@ class FlowlyApp(QWidget):
         self.is_request_pending = False
         self._pending_dialog = None # Reference to active login/signup dialog
         self._editing_task_id = None # Track task being edited
+
+        self.update_record_button.connect(self._handle_record_button_update)
+        self.update_status.connect(lambda text: self.status_label.setText(text))
+        self.update_text_field.connect(lambda text: self.text_field.setText(text))
 
         # --- Initialize UI ---
         self.initUI() # Build widgets
@@ -638,7 +654,7 @@ class FlowlyApp(QWidget):
         self.is_request_pending = True
         self.set_controls_enabled(False)
 
-    # --- populate_task_list Method (Keep As Is) ---
+    # --- populate_task_list Method ---
     def populate_task_list(self, sorted_tasks):
         self.task_list.clear()
         if not sorted_tasks:
@@ -657,14 +673,14 @@ class FlowlyApp(QWidget):
                 self.task_list.setItemWidget(list_item, task_widget)
             except Exception as e: print(f"Error creating widget for task {task_data}: {e}")
 
-    # --- request_get_tasks Method (Keep As Is) ---
+    # --- request_get_tasks Method ---
     def request_get_tasks(self):
         if not self.logged_in_user: QMessageBox.warning(self, "Not Logged In", "Please log in."); return
         if self.is_request_pending: QMessageBox.information(self, "Busy", "Processing request."); return
         self.set_busy_status("Refreshing tasks...")
         self.request_network_action.emit({'action': 'get_tasks'})
 
-    # --- handle_task_status_change Method (Keep As Is) ---
+    # --- handle_task_status_change Method ---
     @pyqtSlot(int, bool)
     def handle_task_status_change(self, task_id, is_done):
         if self.is_request_pending: print("WARN: Ignoring status change during request."); return
@@ -672,7 +688,7 @@ class FlowlyApp(QWidget):
         self.set_busy_status(f"Updating task {task_id}...")
         self.request_network_action.emit({'action': 'update_task_status', 'task_id': task_id, 'status': new_status})
 
-    # --- send_task Method (Keep As Is) ---
+    # --- send_task Method ---
     def send_task(self):
         task_desc = self.text_field.text().strip()
         if not task_desc: QMessageBox.warning(self, "Input Error", "Task description empty."); return
@@ -682,29 +698,36 @@ class FlowlyApp(QWidget):
         self.request_network_action.emit({'action': 'add_task', 'task_desc': task_desc})
         self.text_field.clear()
 
-    # --- record_task Method (Keep As Is - includes previous fix) ---
+    def _handle_record_button_update(self, enabled, text):
+        self.record_btn.setEnabled(enabled)
+        self.record_btn.setText(text)
+
+    # --- record_task Method ---
     def record_task(self):
         if self.is_request_pending: QMessageBox.information(self, "Busy", "Processing request."); return
         self.record_btn.setEnabled(False); self.record_btn.setText("Recording...")
         threading.Thread(target=self._record_task_thread, daemon=True).start()
 
-    # --- _record_task_thread Method (Keep As Is - includes previous fix) ---
+    # --- _record_task_thread Method ---
     def _record_task_thread(self):
         recognized_text = None; error_message = None
         try:
             with sr.Microphone() as mic:
-                self.recognizer.adjust_for_ambient_noise(mic, duration=0.3)
-                print("DEBUG: Listening..."); audio = self.recognizer.listen(mic, timeout=5, phrase_time_limit=10)
+                self.recognizer.adjust_for_ambient_noise(mic, duration=0.5)
+                print("DEBUG: Listening..."); audio = self.recognizer.listen(mic, timeout=5, phrase_time_limit=15)
                 print("DEBUG: Processing..."); recognized_text = self.recognizer.recognize_google(audio).lower()
         except sr.WaitTimeoutError: error_message = "No speech detected."
         except sr.UnknownValueError: error_message = "Could not understand audio."
         except sr.RequestError as e: error_message = f"Recognition service error; {e}"
         except Exception as e: error_message = f"Recording error: {e}"; print(f"ERROR: {e}")
         finally:
-            if recognized_text: QMetaObject.invokeMethod(self.text_field, "setText", Qt.QueuedConnection, Q_ARG(str, recognized_text))
-            if error_message: QMetaObject.invokeMethod(self.status_label, "setText", Qt.QueuedConnection, Q_ARG(str, f"Status: {error_message}"))
-            QMetaObject.invokeMethod(self.record_btn, "setEnabled", Qt.QueuedConnection, Q_ARG(bool, True))
-            QMetaObject.invokeMethod(self.record_btn, "setText", Qt.QueuedConnection, Q_ARG(str, "Record"))
+            if recognized_text: 
+                self.update_text_field.emit(recognized_text)
+            if error_message: 
+                self.update_status.emit(f"Status: {error_message}")
+            self.update_record_button.emit(True, "Record") # Re-enable button
+            # QMetaObject.invokeMethod(self.record_btn, "setEnabled", Qt.QueuedConnection, Q_ARG(bool, True))
+            # QMetaObject.invokeMethod(self.record_btn, "setText", Qt.QueuedConnection, Q_ARG(str, "Record"))
 
     # --- show_task_context_menu Method (Keep As Is) ---
     @pyqtSlot(QPoint)

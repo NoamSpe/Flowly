@@ -6,6 +6,7 @@ import json
 import pickle
 import dateparser as dp
 import bcrypt # <-- Import bcrypt
+import ssl
 import numpy as np
 
 import torch
@@ -69,9 +70,9 @@ def NER_predict(sentence):
     return [idx2label[idx] for idx in preds[:len(tokens)]]
     
 # --- Category Classifier Model ---
-with open('CategoryClassifier_Model.pkl', 'rb') as f:
+with open('CategoryClassification/CategoryClassifier_Model.pkl', 'rb') as f:
     CatClassifier = pickle.load(f)
-with open('CategoryClassifier_Vectorizer.pkl', 'rb') as f:
+with open('CategoryClassification/CategoryClassifier_Vectorizer.pkl', 'rb') as f:
     CatVectorizer = pickle.load(f)
 
 
@@ -87,8 +88,9 @@ class TaskServer:
         self.active_users = {} # {username: userid}
         # self._ensure_test_user_exists() # Let's rely on signup/login for testing now
 
-    # def _ensure_test_user_exists(self): # Removed for clarity, use signup
-    #     pass
+        # SSL context
+        self.ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self.ssl_context.load_cert_chain(certfile='server.crt', keyfile='server.key')
 
     def _setup_server(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -102,11 +104,16 @@ class TaskServer:
         self.sock.listen()
         print(f"Server listening on {self.host}:{self.port}")
 
-    def handle_client(self, conn, addr): # Add addr for better logging
+    def handle_client(self, client, addr): # Add addr for better logging
         print(f"Handling connection from {addr}")
         current_user_id = None
         current_username = None
+        conn = None
         try:
+            # Wrap socket with SSL
+            conn = self.ssl_context.wrap_socket(client, server_side=True)
+            print(f"SSL handshake completed with {addr}")
+
             while True:
                 # Improved message receiving: Buffer until newline
                 buffer = b""
@@ -377,8 +384,8 @@ class TaskServer:
                     print(f"ERROR: Exception processing request from {current_username or addr}: {e}")
                     self._send_response(conn, {'status':'error','message':f'Server error processing request: {e}'})
 
-        except (ConnectionResetError, BrokenPipeError):
-            print(f"Client {addr} disconnected.")
+        except (ssl.SSLError, ConnectionResetError, BrokenPipeError) as e:
+            print(f"Client {addr} SSL/connection error: {e}")
         except Exception as e:
             print(f"ERROR: Unhandled exception in client handler for {addr}: {e}")
             # Try sending a generic error if possible
@@ -387,6 +394,11 @@ class TaskServer:
             except:
                 pass # Ignore if sending fails
         finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception as e:
+                    print(f"Error closing SSL socket for {addr}: {e}")
             # Clean up active user entry if they were logged in
             if current_username and current_username in self.active_users:
                  # Check if the stored user_id matches the one for this session before deleting
