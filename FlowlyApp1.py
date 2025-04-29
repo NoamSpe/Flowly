@@ -192,6 +192,9 @@ class TaskItemWidget(QWidget):
         layout.addWidget(self.checkbox); layout.addWidget(self.desc_label, 1); layout.addWidget(self.datetime_label)
         layout.addSpacerItem(QSpacerItem(10, 0)); layout.addWidget(urgency_label); layout.addSpacerItem(QSpacerItem(10, 0))
         layout.addWidget(self.edit_button); layout.addWidget(self.delete_button)
+        self.setAttribute(Qt.WA_StyledBackground)  # Enable custom styling
+        self.setStyleSheet("""TaskItemWidget {background: #ffffff;}""")
+
         self.update_appearance()
 
     def on_checkbox_change(self, state):
@@ -278,6 +281,7 @@ class FlowlyApp(QWidget):
         self.text_field = QLineEdit(); self.text_field.setPlaceholderText("Enter new task...")
         self.text_field.returnPressed.connect(self.send_task)
         self.sendTask_btn = QPushButton("Add Task"); self.sendTask_btn.clicked.connect(self.send_task)
+        self.sendTask_btn.setObjectName("SendTaskBtn")
         self.record_btn = QPushButton("Record"); self.record_btn.clicked.connect(self.record_task)
         input_layout.addWidget(self.text_field, 1); input_layout.addWidget(self.sendTask_btn); input_layout.addWidget(self.record_btn)
         # Sort Control
@@ -328,6 +332,7 @@ class FlowlyApp(QWidget):
         # Buttons
         buttonBox = QDialogButtonBox(dialog)
         login_btn = buttonBox.addButton("Login", QDialogButtonBox.AcceptRole)
+        login_btn.setObjectName("LoginBtn")
         signup_btn = buttonBox.addButton("Sign Up", QDialogButtonBox.ActionRole)
         cancel_btn = buttonBox.addButton(QDialogButtonBox.Cancel)
         layout.addRow(buttonBox)
@@ -787,25 +792,24 @@ class FlowlyApp(QWidget):
 
     # --- handle_logout Method ---
     def handle_logout(self):
-         if self.logged_in_user:
-              confirm = QMessageBox.question(self, "Confirm Logout", f"Log out?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-              if confirm == QMessageBox.Yes:
-                    print(f"Logging out user {self.logged_in_user}")
-                    # Store username before clearing
-                    logged_out_user = self.logged_in_user
-                    self.logged_in_user = None
-                    # Inform worker user is gone - send empty string
-                    self.set_worker_user.emit("")
-                    # Optionally close/reset connection
-                    # self.network_worker.close_connection()  
-                    # Clear UI immediately
-                    self.task_list.clear()
-                    self.setWindowTitle("Flowly - Task Manager")
-                    self.status_label.setText("Status: Logged out.")
-                    self.hide() # Hide main window
-
-                    # Use QTimer to show login dialog AFTER current event processing
-                    QTimer.singleShot(0, self.showLogin)
+        if self.logged_in_user:
+            confirm = QMessageBox.question(self, "Confirm Logout", f"Log out?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if confirm == QMessageBox.Yes:
+                print(f"Logging out user {self.logged_in_user}")
+                # Store username before clearing
+                logged_out_user = self.logged_in_user
+                self.logged_in_user = None
+                # Inform worker user is gone - send empty string
+                self.set_worker_user.emit("")
+                # Optionally close/reset connection
+                # self.network_worker.close_connection()  
+                # Clear UI immediately
+                self.task_list.clear()
+                self.setWindowTitle("Flowly - Task Manager")
+                self.status_label.setText("Status: Logged out.")
+                self.hide() # Hide main window
+                # Use QTimer to show login dialog AFTER current event processing
+                QTimer.singleShot(0, self.showLogin)
 
     # --- closeEvent Method (Keep As Is) ---
     def closeEvent(self, event):
@@ -821,6 +825,10 @@ class FlowlyApp(QWidget):
 # --- Main Execution ---
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    # app.setStyle('Fusion')
+    def load_stylesheet(path):
+        with open(path, "r") as file:
+            return file.read()
+    style = load_stylesheet("style.qss")
+    app.setStyleSheet(style)
     window = FlowlyApp()
     sys.exit(app.exec_())
