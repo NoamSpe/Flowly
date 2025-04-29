@@ -1,13 +1,16 @@
 import socket
 import threading
 from database import Database
+import json
+import pickle
 import dateparser as dp
+import bcrypt
 
 import torch
 import torch.nn as nn
 from TorchCRF import CRF
 from collections import defaultdict
-import pickle
+
 
 # ---------------------------------------- LOADING NER MODEL ----------------------------------------
 # Model definition
@@ -70,7 +73,19 @@ class TaskServer:
         self.host = host
         self.port = port
         self.db = Database()
+        self.db.debug_print_all_users()
         self._setup_server()
+        self.active_users = {} # {username: userid}
+        self._ensure_test_user_exists()
+
+    def _ensure_test_user_exists(self):
+        # Check if 'test' user exists, create if not
+        user = self.db.get_user_by_username('test')
+        if not user:
+            # For testing, create 'test' user with dummy data
+            password_hash = bcrypt.hashpw('testpass'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            self.db.create_user('test', 'test@example.com', password_hash)
+            print("Created 'test' user with password 'testpass' for testing.")
 
     def _setup_server(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -83,41 +98,127 @@ class TaskServer:
         print("starting handling")
         try:
             while True:
-                task_desc = conn.recv(1024).decode('utf-8')
-                if not task_desc:
+                data = conn.recv(1024).decode('utf-8')
+                if not data:
                     print("client disconnected")
                     break
+                
+                try:
+                    request = json.loads(data)
+                    print(request)
+                    action = request.get('action')
 
-                print("got data!", task_desc)
+                    if action == 'login':
+                        username = request.get('user')
+                        password = request.get('password')
+                        print(f"DEBUG: Login attempt for username: '{username}'")  # Debug print
 
-                # Process with NER
-                prediction = NER_predict(task_desc)
-                print(prediction)
-                DateExp = ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Date', 'I-Date']])
-                if DateExp: Date = dp.parse(DateExp, languages=['en'], settings={'DATE_ORDER': 'DMY', 'PREFER_DATES_FROM': 'future'}).date()
-                else: Date = ''
-                TimeExp = ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Time', 'I-Time']])
-                if TimeExp: Time = dp.parse(TimeExp, languages=['en'], settings={'DATE_ORDER': 'DMY', 'PREFER_DATES_FROM': 'future'}).time()
-                else: Time = ''
-                task_data = {
-                    'TaskDesc': ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Task', 'I-Task']]),
-                    'Date': str(Date),
-                    'Time': str(Time),
-                    'Category': 'General', # change when category prediction is implemented
-                    'Urgency': 3 # change when urgency prediction is implemented
-                }
-                print(task_data)
+                        user_info = self.db.get_user_by_username(username)
+                        print(f"DEBUG: Retrieved user info: {user_info}")  # Debug print
 
-                # Store in database
-                self.db.create_task(
-                    user_id=int(1),
-                    **task_data
-                )
-                print("task stored in database!")
+                        if user_info:  # User exists
+                            stored_hash = user_info[2]
+                            if bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8')):
+                                user_id = user_info[0]  # UserID is first column
+                                username_from_db = user_info[1]  # Actual username from DB
+                                print(f"DEBUG: Logging in user ID: {user_id}, Username: {username_from_db}")
+                                self.active_users[username_from_db] = user_id
+                                conn.send(json.dumps({'status': 'success', 'username':username_from_db}).encode('utf-8'))
+                            else:
+                                conn.send(json.dumps({'status': 'failed', 'message': 'Invalid password'}).encode('utf-8'))
+                        else:
+                            error_msg = f"User '{username}' not found"
+                            print(f"DEBUG: {error_msg}")
+                            conn.send(json.dumps({'status': 'failed', 'message': error_msg}).encode('utf-8'))
+                        continue
+                    if action == 'signup':
+                        username = request.get('username')
+                        email = request.get('email')
+                        password = request.get('password')
 
-                conn.send(b"Task processed successfully")
+                        existing_user = self.db.get_user_by_username(username)
+                        existing_email = self.db.get_user_by_email(email)
+
+                        if existing_user:
+                            conn.send(json.dumps({'status':'error', 'message':'Username already exists'}).encode('utf-8'))
+                            continue
+                        elif existing_email:
+                            conn.send(json.dumps({'status':'error', 'message':'Email already exists'}).encode('utf-8'))
+                            continue
+                        else:
+                            password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                            user_id = self.db.create_user(username, email, password_hash)
+                            conn.send(json.dumps({'status':'success', 'user_id':user_id}).encode('utf-8'))
+                    elif action == 'get_task':
+                        task_id = request.get('task_id')
+                        task = self.db.get_task(task_id)
+                        if task:
+                            conn.send(json.dumps({'status': 'success', 'task': task}).encode('utf-8'))
+                        else:
+                            conn.send(json.dumps({'status': 'error', 'message': 'Task not found'}).encode('utf-8'))
+                        continue
+                    if action == 'add_task':
+                        task_desc = request.get('task_desc')
+                        print("got data!", task_desc)
+                        # Process with NER
+                        prediction = NER_predict(task_desc)
+                        print(prediction)
+                        DateExp = ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Date', 'I-Date']])
+                        Date = dp.parse(DateExp, languages=['en'], settings={'DATE_ORDER': 'DMY', 'PREFER_DATES_FROM': 'future'}).date() if DateExp else ''
+                        TimeExp = ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Time', 'I-Time']])
+                        Time = dp.parse(TimeExp, languages=['en'], settings={'DATE_ORDER': 'DMY', 'PREFER_DATES_FROM': 'future'}).time() if TimeExp else ''
+                        task_data = {
+                            'TaskDesc': ' '.join([word for ind, word in enumerate(task_desc.split(' ')) if prediction[ind] in ['B-Task', 'I-Task']]),
+                            'Date': str(Date),
+                            'Time': str(Time),
+                            'Category': 'General', # change when category prediction is implemented
+                            'Urgency': 3 # change when urgency prediction is implemented
+                        }
+                        print(task_data)
+
+                        user_id = self.active_users.get(username)
+                        if not user_id:
+                            conn.send(json.dumps({'status':'error','message':'User not logged in'}).encode('utf-8'))
+                            continue
+                        # Store in database
+                        self.db.create_task(
+                            user_id=user_id,
+                            **task_data
+                        )
+
+                        print("task stored in database!")
+                        conn.send(json.dumps({'status':'task_added'}).encode('utf-8'))
+                    elif action == 'get_tasks':
+                        tasks = self.db.get_tasks(user_id = self.active_users[username])
+                        conn.send(json.dumps({'tasks':tasks}).encode('utf-8'))
+                    elif action == 'update_status':
+                        task_id = request.get('task_id')
+                        status = request.get('status')
+                        self.db.update_task_status(task_id, status)
+                        conn.send(json.dumps({'status': 'status_updated'}).encode('utf-8'))
+                    elif action == 'update_task':
+                        task_id = request.get('task_id')
+                        update_data = request.get('update_data')
+                        user_id = self.active_users.get(username)
+                        task = self.db.get_task(task_id)
+                        if task and task[1] == user_id:
+                            self.db.update_task(task_id, **update_data)
+                            conn.send(json.dumps({'status':'task_updated'}).encode('utf-8'))
+                        else:
+                            conn.send(json.dumps({'status':'error', 'message':'Unauthorized'}).encode('utf-8'))
+                    elif action == 'delete_task':
+                        task_id = request.get('task_id')
+                        user_id = self.active_users.get(username)
+                        task = self.db.get_task(task_id)
+                        if task and task[1] == user_id:
+                            self.db.delete_task(task_id)
+                            conn.send(json.dumps({'status':'task_deleted'}).encode('utf-8'))
+                        else:
+                            conn.send(json.dumps({'status':'error', 'message':'Unauthorized'}).encode('utf-8'))
+                except json.JSONDecodeError:
+                    conn.send(json.dumps({'error':'Invalid request format'}).encode('utf-8'))
         except Exception as e:
-            conn.send(f"Error: {str(e)}".encode())
+            conn.send(json.dumps({'error':str(e)}).encode('utf-8'))
         finally:
             conn.close()
             print("connection closed")
