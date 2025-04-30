@@ -30,8 +30,8 @@ class ModelsLoader():
     def __init__(self):
         self.model = None
         self.paths = {
-            'ner_model': 'NERModel.pth',
-            'ner_tokenizer': 'NERTokenizer.pkl',
+            'ner_model': 'NER/NERModel.pth',
+            'ner_tokenizer': 'NER/NERtokenizer.pkl',
             'cat_classifier': 'CategoryClassification/CategoryClassifier_Model.pkl',
             'cat_vectorizer': 'CategoryClassification/CategoryClassifier_Vectorizer.pkl'
         }
@@ -52,13 +52,13 @@ class ModelsLoader():
         self.NerModel.load_state_dict(torch.load(self.paths['ner_model']))
         self.NerModel.eval()
     def load_ner_tokenizer(self):
-        with open('NERtokenizer.pkl', 'rb') as f:  # saved during training
+        with open(self.paths['ner_tokenizer'], 'rb') as f:  # saved during training
             tokenizer_dict = pickle.load(f)
         self.tokenizer = defaultdict(lambda: 1, tokenizer_dict)
     def load_cat_classifier(self):
-        with open('CategoryClassification/CategoryClassifier_Model.pkl', 'rb') as f:
+        with open(self.paths['cat_classifier'], 'rb') as f:
             self.CatClassifier = pickle.load(f)
-        with open('CategoryClassification/CategoryClassifier_Vectorizer.pkl', 'rb') as f:
+        with open(self.paths['cat_vectorizer'], 'rb') as f:
             self.CatVectorizer = pickle.load(f)
 
     def NER_predict(self, sentence):
