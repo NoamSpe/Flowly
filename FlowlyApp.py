@@ -5,7 +5,7 @@ import socket
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
                              QPushButton, QLabel, QListWidget, QListWidgetItem, QInputDialog,
                              QMessageBox, QMenu, QDialog, QComboBox, QDialogButtonBox,
-                             QCheckBox, QSpacerItem, QSizePolicy, QFrame, QFormLayout)
+                             QCheckBox, QSpacerItem, QSizePolicy, QFrame, QFormLayout, QRadioButton)
 # Make sure all QtCore imports are present
 from PyQt5.QtCore import (pyqtSignal, QObject, Qt, QThread, pyqtSlot,
                           QMetaObject, Q_ARG, QPoint, QTimer) # Added QTimer
@@ -286,6 +286,40 @@ class FlowlyApp(QWidget):
         self.sendTask_btn.setObjectName("SendTaskBtn")
         self.record_btn = QPushButton("Record"); self.record_btn.clicked.connect(self.record_task)
         input_layout.addWidget(self.text_field, 1); input_layout.addWidget(self.sendTask_btn); input_layout.addWidget(self.record_btn)
+        # List controls
+        list_controls_layout = QHBoxLayout()
+        # Status filter
+        status_filter_layout = QVBoxLayout()
+        status_filter_label = QLabel("Filter by Status:")
+        status_filter_layout.addWidget(status_filter_label)
+        status_radios_layout = QHBoxLayout()
+        self.Rstatus_all = QRadioButton("All")
+        self.Rstatus_pending = QRadioButton("Pending")
+        self.Rstatus_done = QRadioButton("Done")
+        self.Rstatus_pending.setChecked(True)
+        status_radios_layout.addWidget(self.Rstatus_all)
+        status_radios_layout.addWidget(self.Rstatus_pending)
+        status_radios_layout.addWidget(self.Rstatus_done)
+        status_filter_layout.addLayout(status_radios_layout)
+        self.Rstatus_all.toggled.connect(self.update_filters)
+        self.Rstatus_pending.toggled.connect(self.update_filters)
+        self.Rstatus_done.toggled.connect(self.update_filters)
+        list_controls_layout.addLayout(status_filter_layout)
+        list_controls_layout.addSpacerItem(QSpacerItem(30, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        # Category filter
+        self.category_checkboxes = {}
+        category_filter_layout = QVBoxLayout()
+        category_filter_label = QLabel("Filter by Category:")
+        category_filter_layout.addWidget(category_filter_label)
+        category_checkboxes_layout = QHBoxLayout()
+        for cat in ["Work", "School", "Personal", "Household", "Health"]:
+            cb = QCheckBox(cat)
+            self.category_checkboxes[cat] = cb
+            cb.stateChanged.connect(self.update_filters)
+            category_checkboxes_layout.addWidget(cb)
+        category_filter_layout.addLayout(category_checkboxes_layout)
+        list_controls_layout.addLayout(category_filter_layout)
+        list_controls_layout.addSpacerItem(QSpacerItem(30, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
         # Sort Control
         sort_layout = QHBoxLayout()
         sort_label = QLabel("Sort by:")
@@ -295,6 +329,7 @@ class FlowlyApp(QWidget):
         sort_layout.addStretch() # Push to the right
         sort_layout.addWidget(sort_label)
         sort_layout.addWidget(self.sort_combo)
+        list_controls_layout.addLayout(sort_layout)
         # Task List
         self.task_list = QListWidget(); self.task_list.setSelectionMode(QListWidget.NoSelection)
         self.task_list.setFocusPolicy(Qt.NoFocus); self.task_list.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -309,7 +344,7 @@ class FlowlyApp(QWidget):
         self.status_label = QLabel("Status: Initializing...")
         self.status_label.setStyleSheet("color: gray;")
         # Add layouts/widgets
-        self.layout.addLayout(input_layout); self.layout.addLayout(sort_layout); self.layout.addWidget(self.task_list)
+        self.layout.addLayout(input_layout); self.layout.addLayout(list_controls_layout); self.layout.addWidget(self.task_list)
         self.layout.addLayout(button_layout); self.layout.addWidget(self.status_label)
         # Window starts hidden by default
 
@@ -473,9 +508,9 @@ class FlowlyApp(QWidget):
         elif self.logged_in_user:
             if action == 'get_tasks' and status == 'success':
                 print("DEBUG: Handling get_tasks response.")
-                tasks = response.get('tasks', [])
-                self.sort_and_display_tasks(tasks)
-                if not self.is_request_pending: self.status_label.setText(f"Tasks loaded ({len(tasks)}). sorted by {self.current_sort_mode.replace('_', ' ').title()}")
+                self.tasks_cache = response.get('tasks', [])
+                self.sort_and_display_tasks()
+                if not self.is_request_pending: self.status_label.setText(f"Tasks loaded ({len(self.tasks_cache)}). sorted by {self.current_sort_mode.replace('_', ' ').title()}")
             elif action == 'add_task' and status == 'task_added':
                 QMessageBox.information(self, "Success", message or "Task added.")
                 self.request_get_tasks() # Refresh
@@ -550,7 +585,7 @@ class FlowlyApp(QWidget):
         if mode != self.current_sort_mode:
             self.current_sort_mode = mode
             print(f"DEBUG: Sort mode changed to {self.current_sort_mode}")
-            self.sort_and_display_tasks(self.tasks_cache)
+            self.sort_and_display_tasks()
     
     def calculate_urgency(self, task_data):
         """Calculates dynamic urgency score for a single task."""
@@ -599,17 +634,13 @@ class FlowlyApp(QWidget):
         # print(f"DEBUG: TaskID {task_data[0]}, Due: {due_datetime}, DeltaH: {delta_hours if due_datetime else 'N/A'}, TF: {time_factor:.3f}, CF: {category_factor:.3f}, Score: {urgency_score:.3f}")
         return urgency_score
 
-    def sort_and_display_tasks(self, tasks):
-        """Sorts the raw task data based on current mode and updates list."""
-        self.tasks_cache = tasks # Update cache
+    def sort_tasks(self, tasks, mode):
         print(f"DEBUG: Sorting {len(tasks)} tasks by {self.current_sort_mode}")
-
         if not tasks:
             self.populate_task_list([]) # Clear list if no tasks
-            return
-
+            return []
         sorted_tasks = []
-        if self.current_sort_mode == "urgency":
+        if mode == 'urgency':
             # Create list of (score, task_data) tuples for sorting
             tasks_with_scores = []
             for task in tasks:
@@ -619,7 +650,7 @@ class FlowlyApp(QWidget):
             tasks_with_scores.sort(key=lambda item: item[0], reverse=True)
             sorted_tasks = [item[1] for item in tasks_with_scores] # Extract sorted task data
 
-        elif self.current_sort_mode == "due_date":
+        elif mode == 'due_date':
             # Sort by date, time (earliest first). Handle None values (put them last).
             def get_sort_key(task):
                 # TaskID, TaskDesc, DateStr, TimeStr, Category, UrgencyDB, Status
@@ -642,12 +673,52 @@ class FlowlyApp(QWidget):
                         return far_future_datetime # Invalid date format -> last
                 else:
                     return far_future_datetime # No date -> last
-
             sorted_tasks = sorted(tasks, key=get_sort_key)
         else: # Default or unknown sort
             sorted_tasks = tasks # Keep original order
+        return sorted_tasks
 
-        self.populate_task_list(sorted_tasks)
+    def sort_and_display_tasks(self):
+        tasks = self.tasks_cache
+
+        # 1. status filter
+        selected_status = None
+        if self.Rstatus_all.isChecked(): selected_status = 'all'
+        elif self.Rstatus_pending.isChecked(): selected_status = 'pending'
+        elif self.Rstatus_done.isChecked(): selected_status = 'done'
+        filtered_tasks = []
+        for task in tasks:
+            task_status = task[6]
+            if selected_status == 'all': filtered_tasks.append(task)
+            elif task_status == selected_status: filtered_tasks.append(task)
+        
+        # 2. category filter
+        selected_categories = [cat for cat, cb in self.category_checkboxes.items() if cb.isChecked()]
+        if not selected_categories: selected_categories = list(self.category_checkboxes.keys())
+        category_filtered = []
+        for task in filtered_tasks:
+            task_cat = task[4]
+            if task_cat in selected_categories: category_filtered.append(task)
+        
+        # 3. sort tasks
+        if selected_status == 'done':
+            self.sort_combo.setCurrentIndex(0)
+            self.sort_combo.setEnabled(False)
+            sort_mode = 'due_date'
+        else:
+            self.sort_combo.setEnabled(True)
+            sort_mode = 'due_date' if self.sort_combo.currentIndex() == 0 else 'urgency'
+        
+        if selected_status == 'all':
+            pending = [task for task in category_filtered if task[6] == 'pending']
+            done = [task for task in category_filtered if task[6] == 'done']
+            pending = self.sort_tasks(pending, sort_mode)
+            done = self.sort_tasks(done, 'due_date')
+            final_tasks = (pending or []) + (done or [])
+        else:
+            final_tasks = self.sort_tasks(category_filtered, sort_mode)
+
+        self.populate_task_list(final_tasks)
 
 # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # --- set_controls_enabled Method ---
@@ -660,6 +731,10 @@ class FlowlyApp(QWidget):
         self.status_label.setText(message)
         self.is_request_pending = True
         self.set_controls_enabled(False)
+
+    def update_filters(self):
+        if not self.is_request_pending:
+            self.sort_and_display_tasks()
 
     # --- populate_task_list Method ---
     def populate_task_list(self, sorted_tasks):
