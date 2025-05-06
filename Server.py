@@ -278,7 +278,7 @@ class TaskServer:
                                 'Date': str(date_obj) if date_obj else None,
                                 'Time': str(time_obj) if time_obj else None,
                                 'Category': predicted_category, 
-                                'Urgency': request.get('Urgency', 3),   # Allow override or default
+                                # 'Urgency': request.get('Urgency', 3),   # Allow override or default
                                 'Status': 'pending' # Always start as pending
                             }
                             print(f"Processed task data: {task_data}")
@@ -358,15 +358,15 @@ class TaskServer:
                         if task_info and task_info[1] == current_user_id: # Check UserID at index 1
                              # Convert tuple to dict for easier client handling
                              task_dict = {
-                                 'TaskID': task_info[0],
-                                 'UserID': task_info[1], # Include UserID
-                                 'TaskDesc': task_info[2],
-                                 'Date': task_info[3],
-                                 'Time': task_info[4],
-                                 'Category': task_info[5],
-                                 'Urgency': task_info[6],
-                                 'Status': task_info[7]
-                                 # Add CreatedAt, UpdatedAt if needed
+                                'TaskID': task_info[0],
+                                'UserID': task_info[1], # Include UserID
+                                'TaskDesc': task_info[2],
+                                'Date': task_info[3],
+                                'Time': task_info[4],
+                                'Category': task_info[5],
+                                # 'Urgency': task_info[6],
+                                'Status': task_info[6]
+                                # Add CreatedAt, UpdatedAt if needed
                              }
                              self._send_response(conn, {'status': 'success', 'task': task_dict, 'action_echo':'get_task'})
                         elif task_info:
