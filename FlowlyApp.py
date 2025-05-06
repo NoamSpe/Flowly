@@ -174,7 +174,7 @@ class TaskItemWidget(QWidget):
     edit_requested = pyqtSignal(int)       # task_id
     delete_requested = pyqtSignal(int)     # task_id
 
-    def __init__(self, task_id, desc, date, time, category, urgency, status, parent=None):
+    def __init__(self, task_id, desc, date, time, category, status, parent=None):
         super().__init__(parent)
         self.task_id = task_id
         self.is_done = (status == 'done')
@@ -186,13 +186,13 @@ class TaskItemWidget(QWidget):
         if date and date != 'None': datetime_str += f"{date} "
         if time and time != 'None': datetime_str += f"{time}"
         self.datetime_label = QLabel(datetime_str.strip()); self.datetime_label.setStyleSheet("color: gray; font-size: 9pt;")
-        urgency_label = QLabel(f"Urg: {urgency}"); urgency_label.setStyleSheet("color: #888;")
+        cat_label = QLabel(f"Cat: {category}"); cat_label.setStyleSheet("color: #888;")
         self.edit_button = QPushButton("Edit"); self.edit_button.setFixedSize(40, 25)
         self.edit_button.clicked.connect(lambda: self.edit_requested.emit(self.task_id))
         self.delete_button = QPushButton("Del"); self.delete_button.setFixedSize(40, 25); self.delete_button.setStyleSheet("color: red;")
         self.delete_button.clicked.connect(lambda: self.delete_requested.emit(self.task_id))
         layout.addWidget(self.checkbox); layout.addWidget(self.desc_label, 1); layout.addWidget(self.datetime_label)
-        layout.addSpacerItem(QSpacerItem(10, 0)); layout.addWidget(urgency_label); layout.addSpacerItem(QSpacerItem(10, 0))
+        layout.addSpacerItem(QSpacerItem(10, 0)); layout.addWidget(cat_label); layout.addSpacerItem(QSpacerItem(10, 0))
         layout.addWidget(self.edit_button); layout.addWidget(self.delete_button)
         self.setAttribute(Qt.WA_StyledBackground)  # Enable custom styling
         self.setStyleSheet("""TaskItemWidget {background: #ffffff;}""")
@@ -592,9 +592,9 @@ class FlowlyApp(QWidget):
         # Unpack carefully, assuming task_data tuple structure:
         # (TaskID, TaskDesc, DateStr, TimeStr, Category, UrgencyDB, Status)
         try:
-            _, _, date_str, time_str, category, _, _ = task_data
+            _, _, date_str, time_str, category, _ = task_data
         except ValueError:
-            print(f"WARN: Could not unpack task data for urgency: {task_data}")
+            print(f"WARN: Could not unpack task data for urgency calculation: {task_data}")
             return 0 # Or some default low score
 
         now = datetime.datetime.now()
@@ -688,7 +688,7 @@ class FlowlyApp(QWidget):
         elif self.Rstatus_done.isChecked(): selected_status = 'done'
         filtered_tasks = []
         for task in tasks:
-            task_status = task[6]
+            task_status = task[5]
             if selected_status == 'all': filtered_tasks.append(task)
             elif task_status == selected_status: filtered_tasks.append(task)
         
@@ -710,8 +710,8 @@ class FlowlyApp(QWidget):
             sort_mode = 'due_date' if self.sort_combo.currentIndex() == 0 else 'urgency'
         
         if selected_status == 'all':
-            pending = [task for task in category_filtered if task[6] == 'pending']
-            done = [task for task in category_filtered if task[6] == 'done']
+            pending = [task for task in category_filtered if task[5] == 'pending']
+            done = [task for task in category_filtered if task[5] == 'done']
             pending = self.sort_tasks(pending, sort_mode)
             done = self.sort_tasks(done, 'due_date')
             final_tasks = (pending or []) + (done or [])
@@ -745,8 +745,8 @@ class FlowlyApp(QWidget):
         print(f"DEBUG: Populating task list with {len(sorted_tasks)} sorted tasks.")
         for task_data in sorted_tasks:
             try:
-                task_id, desc, date, time, cat, urg, stat = task_data # Unpack carefully
-                task_widget = TaskItemWidget(task_id, desc, date, time, cat, urg, stat)
+                task_id, desc, date, time, cat, stat = task_data # Unpack carefully
+                task_widget = TaskItemWidget(task_id, desc, date, time, cat, stat)
                 task_widget.status_changed.connect(self.handle_task_status_change)
                 task_widget.edit_requested.connect(self.request_edit_task)
                 task_widget.delete_requested.connect(self.request_delete_task)
@@ -850,10 +850,9 @@ class FlowlyApp(QWidget):
         date_edit = QLineEdit(task_data.get('Date', '') if task_data.get('Date') != 'None' else ''); date_edit.setPlaceholderText("YYYY-MM-DD")
         time_edit = QLineEdit(task_data.get('Time', '') if task_data.get('Time') != 'None' else ''); time_edit.setPlaceholderText("HH:MM:SS")
         category_edit = QLineEdit(task_data.get('Category', 'General'))
-        urgency_combo = QComboBox(); urgency_combo.addItems([str(i) for i in range(1, 6)]); urgency_combo.setCurrentText(str(task_data.get('Urgency', 3)))
         status_combo = QComboBox(); status_combo.addItems(["pending", "done"]); status_combo.setCurrentText(task_data.get('Status', 'pending'))
         form_layout.addRow("Desc:", desc_edit); form_layout.addRow("Date:", date_edit); form_layout.addRow("Time:", time_edit)
-        form_layout.addRow("Category:", category_edit); form_layout.addRow("Urgency:", urgency_combo); form_layout.addRow("Status:", status_combo)
+        form_layout.addRow("Category:", category_edit); form_layout.addRow("Status:", status_combo)
         layout.addLayout(form_layout)
         btn_box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel); btn_box.accepted.connect(dialog.accept); btn_box.rejected.connect(dialog.reject)
         layout.addWidget(btn_box)
@@ -861,7 +860,7 @@ class FlowlyApp(QWidget):
 
         if dialog.exec_() == QDialog.Accepted:
             update_data = {'TaskDesc': desc_edit.text().strip(), 'Date': date_edit.text().strip() or None, 'Time': time_edit.text().strip() or None,
-                           'Category': category_edit.text().strip(), 'Urgency': int(urgency_combo.currentText()), 'Status': status_combo.currentText()}
+                           'Category': category_edit.text().strip(), 'Status': status_combo.currentText()}
             if not update_data['TaskDesc']: QMessageBox.warning(self, "Input Error", "Desc empty."); return
             if self.is_request_pending: QMessageBox.information(self, "Busy", "Processing request."); return
             self.set_busy_status(f"Saving task {task_id}...")
