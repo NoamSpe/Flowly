@@ -37,7 +37,7 @@ class Database:
                     Date DATE,
                     Time TIME,
                     Category TEXT,
-                    Urgency INTEGER,
+                    
                     Status TEXT DEFAULT 'pending',
                     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -50,15 +50,15 @@ class Database:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO Tasks
-                (UserID, TaskDesc, Date, Time, Category, Urgency, Status)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (UserID, TaskDesc, Date, Time, Category , Status)
+                VALUES (?, ?, ?, ?, ?, ?)
             ''', (
                 user_id,
                 kwargs.get('TaskDesc'),
                 kwargs.get('Date'),
                 kwargs.get('Time'),
                 kwargs.get('Category'),
-                kwargs.get('Urgency'),
+                
                 'pending' # default status
             ))
             conn.commit()
@@ -66,7 +66,7 @@ class Database:
     def get_tasks(self, user_id):
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT TaskID, TaskDesc, Date, Time, Category, Urgency, Status FROM Tasks WHERE UserID = ?", (user_id,))
+            cursor.execute("SELECT TaskID, TaskDesc, Date, Time, Category , Status FROM Tasks WHERE UserID = ?", (user_id,))
             return cursor.fetchall()
     
     def update_task_status(self, task_id, status):
@@ -109,7 +109,7 @@ class Database:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT TaskID, UserID, TaskDesc, Date, Time, Category, Urgency, Status 
+                SELECT TaskID, UserID, TaskDesc, Date, Time, Category , Status 
                 FROM Tasks 
                 WHERE TaskID = ?
             """, (task_id,))
