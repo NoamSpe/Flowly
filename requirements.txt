@@ -1,0 +1,1 @@
+pip install dateparser bcrypt torch TorchCRF PyQt5 speechrecognition pyaudio pyttsx3 scikit-learn
