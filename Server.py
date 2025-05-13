@@ -22,7 +22,7 @@ models = ModelsLoader()
 # ---------------------------------------- SERVER ----------------------------------------
 
 class TaskServer:
-    def __init__(self, host='127.0.0.1', port=4320):
+    def __init__(self, host='0.0.0.0', port=4320):
         self.host = host
         self.port = port
         self.db = Database()

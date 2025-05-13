@@ -98,7 +98,7 @@ class FlowlyApp(QWidget):
 
         # --- Network Thread Setup ---
         self.network_thread = QThread()
-        self.network_worker = NetworkWorker('127.0.0.1', 4320)
+        self.network_worker = NetworkWorker('localhost', 4320)
         self.network_worker.moveToThread(self.network_thread)
         # Connect signals/slots
         self.request_network_action.connect(self.network_worker.process_request)
