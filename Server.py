@@ -16,66 +16,8 @@ from collections import defaultdict
 
 from models import ModelsLoader
 
-# Models definition
+# Models loading
 models = ModelsLoader()
-# --- NER Model ---
-# class BiLSTM_NER(nn.Module):
-#     def __init__(self, vocab_size, embedding_dim, hidden_dim, num_classes):
-#         super(BiLSTM_NER, self).__init__()
-#         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
-#         self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True, bidirectional=True)
-#         self.dropout = nn.Dropout(0.25)
-#         self.fc = nn.Linear(hidden_dim * 2, num_classes)  # BiLSTM doubles hidden size
-#         self.crf = CRF(num_classes)
-
-#     def forward(self, x, tags=None, mask=None):
-#         x = self.embedding(x)
-#         x, _ = self.lstm(x)
-#         x = self.dropout(x)
-#         emissions = self.fc(x)
-
-#         if tags is not None:  # Training
-#             loss = -self.crf(emissions, tags, mask=mask)
-#             return loss
-#         else:  # Prediction
-#             return self.crf.viterbi_decode(emissions, mask=mask)
-
-# MAX_SEQUENCE_LENGTH = 25
-# EMBEDDING_DIM = 100
-# VOCAB_SIZE = 8000
-# HIDDEN_DIM = 64
-# LABELS = ['O', 'B-Task', 'I-Task', 'B-Date', 'I-Date', 'B-Time', 'I-Time']
-# NUM_CLASSES = len(LABELS)
-# NerModel = BiLSTM_NER(VOCAB_SIZE, EMBEDDING_DIM, HIDDEN_DIM, NUM_CLASSES)
-# NerModel.load_state_dict(torch.load('NERModel.pth'))
-# NerModel.eval()
-
-
-# # Load label mappings
-# label2idx = {label: idx for idx, label in enumerate(LABELS)}
-# idx2label = {idx: label for label, idx in label2idx.items()}
-
-# # Load tokenizer (add this after model loading)
-# with open('NERtokenizer.pkl', 'rb') as f:  # saved during training
-#     tokenizer_dict = pickle.load(f)
-# tokenizer = defaultdict(lambda: 1, tokenizer_dict)
-
-# def NER_predict(sentence):
-#     print("start predicting")
-#     tokens = [tokenizer[word.strip().lower()] for word in sentence.split()]
-#     padded = tokens + [0] * (MAX_SEQUENCE_LENGTH - len(tokens))
-#     input_tensor = torch.tensor([padded], dtype=torch.long)
-#     mask = (input_tensor != 0)
-#     with torch.no_grad():
-#         preds = NerModel(input_tensor, mask=mask)[0]  # CRF decode returns list
-#     return [idx2label[idx] for idx in preds[:len(tokens)]]
-    
-# # --- Category Classifier Model ---
-# with open('CategoryClassification/CategoryClassifier_Model.pkl', 'rb') as f:
-#     CatClassifier = pickle.load(f)
-# with open('CategoryClassification/CategoryClassifier_Vectorizer.pkl', 'rb') as f:
-#     CatVectorizer = pickle.load(f)
-
 
 # ---------------------------------------- SERVER ----------------------------------------
 
