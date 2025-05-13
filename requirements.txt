@@ -1,1 +1,5 @@
+# download dependencies
 pip install dateparser bcrypt torch TorchCRF PyQt5 speechrecognition pyaudio pyttsx3 scikit-learn
+
+# generate self-signed certificate according to the config file ssl.conf
+openssl req -x509 -nodes -days 365 -newkey rsa:4096 -keyout server.key -out server.crt -config ssl.conf
