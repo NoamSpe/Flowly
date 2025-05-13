@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QL
 # Make sure all QtCore imports are present
 from PyQt5.QtCore import (pyqtSignal, QObject, Qt, QThread, pyqtSlot,
                           QMetaObject, Q_ARG, QPoint, QTimer) # Added QTimer
-from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtGui import QFont, QIcon, QPixmap
 import speech_recognition as sr
 import pyaudio # Implicitly used by sr.Microphone
 import pyttsx3
@@ -77,6 +77,7 @@ class FlowlyApp(QWidget):
         self.recognizer.pause_threshold = 1.3
         self.recognizer.energy_threshold = 4000
         self.setWindowTitle("Flowly - Task Manager")
+        self.setWindowIcon(QIcon('assets/FlowlyLogo-Square.png'))
         self.setGeometry(200, 200, 700, 500)
 
         # urgency sorting factors setup
@@ -131,6 +132,12 @@ class FlowlyApp(QWidget):
     def initUI(self):
         """Sets up the main window widgets. Does NOT show the window."""
         self.layout = QVBoxLayout(self)
+        # Logo
+        self.logo_label = QLabel(self)
+        logo_pixmap = QPixmap("assets/FlowlyLogo-TextTransparent.png")
+        logo_width = 150; scaled_pixmap = logo_pixmap.scaledToWidth(logo_width, Qt.SmoothTransformation)
+        self.logo_label.setPixmap(scaled_pixmap)
+        self.layout.addWidget(self.logo_label, alignment=Qt.AlignCenter)
         # Input Area
         input_layout = QHBoxLayout()
         self.text_field = QLineEdit(); self.text_field.setPlaceholderText("Enter new task...")
