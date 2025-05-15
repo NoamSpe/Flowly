@@ -19,6 +19,7 @@ QListWidget {
     border-radius: 15px;
     padding: 5px;
     min-width: 600px;
+    min-height: 204px;
 }
 
 QListWidget::item {
@@ -40,7 +41,7 @@ TaskItemWidget QPushButton {
     border: 1px solid #000000;
     border-radius: 15px;
     min-height: 30px;
-    padding: 0 2px 0;
+    padding: 0 8px 0;
 }
 
 TaskItemWidget QPushButton:hover {
@@ -189,4 +190,36 @@ QRadioButton::indicator:checked {
     background-color: #ff913d;
     border: 1px solid #000000;
     border-radius: 6px;
+}
+
+/* Calendar Widget */
+QCalendarWidget {
+    background-color: #ffede1;
+    color: #000000;
+}
+
+QCalendarWidget QToolButton {
+    background-color: #ffffff;
+    color: #000000;
+    border: 1px solid #000000;
+    border-radius: 15px;
+    margin: 2px 3px 2px;
+    min-height: 30px;
+    max-height: 30px;
+    padding: 0 4px 0;
+}
+
+QCalendarWidget QToolButton:hover {
+    background-color: #fff8f4;
+}
+
+QCalendarWidget QToolButton:pressed {
+    background-color: #ffede1;
+}
+
+QCalendarWidget QTableView {
+    background-color: #ffffff;
+    gridline-color: #cccccc;
+    selection-background-color: #ff913d;
+    selection-color: #ffffff;
 }

@@ -4,12 +4,12 @@ import threading
 import socket
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
                              QPushButton, QLabel, QListWidget, QListWidgetItem, QInputDialog,
-                             QMessageBox, QMenu, QDialog, QComboBox, QDialogButtonBox,
-                             QCheckBox, QSpacerItem, QSizePolicy, QFrame, QFormLayout, QRadioButton)
+                             QMessageBox, QMenu, QDialog, QComboBox, QDialogButtonBox, QCheckBox, 
+                             QSpacerItem, QSizePolicy, QFrame, QFormLayout, QRadioButton, QCalendarWidget)
 # Make sure all QtCore imports are present
 from PyQt5.QtCore import (pyqtSignal, QObject, Qt, QThread, pyqtSlot,
-                          QMetaObject, Q_ARG, QPoint, QTimer) # Added QTimer
-from PyQt5.QtGui import QFont, QIcon, QPixmap
+                          QMetaObject, Q_ARG, QPoint, QTimer, QDate, QLocale) # Added QTimer
+from PyQt5.QtGui import QFont, QIcon, QPixmap, QTextCharFormat, QBrush, QColor
 import speech_recognition as sr
 import pyaudio # Implicitly used by sr.Microphone
 import pyttsx3
@@ -78,7 +78,7 @@ class FlowlyApp(QWidget):
         self.recognizer.energy_threshold = 4000
         self.setWindowTitle("Flowly - Task Manager")
         self.setWindowIcon(QIcon('assets/FlowlyLogo-Square.png'))
-        self.setGeometry(200, 200, 700, 500)
+        self.setGeometry(100, 100, 960, 600)
 
         # urgency sorting factors setup
         self.CATEGORY_FACTORS = {
@@ -96,6 +96,10 @@ class FlowlyApp(QWidget):
 
         self.current_sort_mode = "datetime"
         self.tasks_cache = []
+
+        self.calendar_widget = None
+        self.selected_calendar_date = None
+        self.highlighted_dates = set()
 
         # --- Network Thread Setup ---
         self.network_thread = QThread()
@@ -138,6 +142,27 @@ class FlowlyApp(QWidget):
         logo_width = 150; scaled_pixmap = logo_pixmap.scaledToWidth(logo_width, Qt.SmoothTransformation)
         self.logo_label.setPixmap(scaled_pixmap)
         self.layout.addWidget(self.logo_label, alignment=Qt.AlignCenter)
+
+        # Main Layout
+        content_layout = QHBoxLayout()
+        # Calendar View
+        cal_pane_layout = QVBoxLayout()
+        cal_title_lable = QLabel("Filter by Date:")
+        cal_title_lable.setAlignment(Qt.AlignCenter)
+        self.calendar_widget = QCalendarWidget()
+        self.calendar_widget.setGridVisible(True)
+        self.calendar_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.calendar_widget.setVerticalHeaderFormat(QCalendarWidget.NoVerticalHeader)
+        self.calendar_widget.setLocale(QLocale('en_US'))
+        self.calendar_widget.clicked[QDate].connect(self.handle_calendar_date_clicked)
+        cal_pane_layout.addWidget(cal_title_lable); cal_pane_layout.addWidget(self.calendar_widget,1)
+        self.clearDateFilter_btn = QPushButton("Show All Dates")
+        self.clearDateFilter_btn.clicked.connect(self.clear_calendar_selection)
+        uni_format = QTextCharFormat()
+        uni_format.setForeground(QBrush(QColor('#000000')))
+        for day in range(1,8): self.calendar_widget.setWeekdayTextFormat(day, uni_format)
+        cal_pane_layout.addWidget(self.clearDateFilter_btn); cal_pane_layout.addStretch(1)
+        content_layout.addLayout(cal_pane_layout, 0)
         # Input Area
         input_layout = QHBoxLayout()
         self.text_field = QLineEdit(); self.text_field.setPlaceholderText("Enter new task...")
@@ -146,6 +171,9 @@ class FlowlyApp(QWidget):
         self.sendTask_btn.setObjectName("SendTaskBtn")
         self.record_btn = QPushButton("Record"); self.record_btn.clicked.connect(self.record_task)
         input_layout.addWidget(self.text_field, 1); input_layout.addWidget(self.sendTask_btn); input_layout.addWidget(self.record_btn)
+        self.layout.addLayout(input_layout)
+        # Task Area
+        task_area_layout = QVBoxLayout()
         # List controls
         list_controls_layout = QHBoxLayout()
         # Status filter
@@ -190,22 +218,30 @@ class FlowlyApp(QWidget):
         sort_layout.addWidget(sort_label)
         sort_layout.addWidget(self.sort_combo)
         list_controls_layout.addLayout(sort_layout)
+        task_area_layout.addLayout(list_controls_layout)
         # Task List
+        self.task_list_label = QLabel("Showing Tasks")
+        self.task_list_label.setStyleSheet("font-weight: bold; padding: 5px;")
         self.task_list = QListWidget(); self.task_list.setSelectionMode(QListWidget.NoSelection)
         self.task_list.setFocusPolicy(Qt.NoFocus); self.task_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.task_list.customContextMenuRequested.connect(self.show_task_context_menu)
+        task_area_layout.addWidget(self.task_list)
+        task_area_layout.addWidget(self.task_list_label)
         # Button Layout
         button_layout = QHBoxLayout()
         self.refreshList_btn = QPushButton("Refresh List"); self.refreshList_btn.clicked.connect(self.request_get_tasks)
         self.logout_btn = QPushButton("Logout"); self.logout_btn.clicked.connect(self.handle_logout)
         button_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
         button_layout.addWidget(self.refreshList_btn); button_layout.addWidget(self.logout_btn)
+        task_area_layout.addLayout(button_layout)
+
+        content_layout.addLayout(task_area_layout, 1)
+        self.layout.addLayout(content_layout)
         # Status Bar
         self.status_label = QLabel("Status: Initializing...")
         self.status_label.setStyleSheet("color: gray;")
         # Add layouts/widgets
-        self.layout.addLayout(input_layout); self.layout.addLayout(list_controls_layout); self.layout.addWidget(self.task_list)
-        self.layout.addLayout(button_layout); self.layout.addWidget(self.status_label)
+        self.layout.addWidget(self.status_label)
         # Window starts hidden by default
 
     def showLogin(self):
@@ -339,6 +375,7 @@ class FlowlyApp(QWidget):
                     # 5. Fetch initial data
                     print("DEBUG: Requesting initial tasks after login.")
                     self.request_get_tasks()
+                    self.update_calendar_highlights() # Update calendar highlights
                 else:
                     print("ERROR: Login success response missing username.")
                     QMessageBox.critical(local_dialog_ref, "Login Error", "Login incomplete.")
@@ -372,6 +409,7 @@ class FlowlyApp(QWidget):
                 print("DEBUG: Handling get_tasks response.")
                 self.tasks_cache = response.get('tasks', [])
                 self.sort_and_display_tasks()
+                self.update_calendar_highlights()
                 if not self.is_request_pending: self.status_label.setText(f"Tasks loaded ({len(self.tasks_cache)}). sorted by {self.current_sort_mode.replace('_', ' ').title()}")
             elif action == 'add_task' and status == 'task_added':
                 QMessageBox.information(self, "Success", message or "Task added.")
@@ -441,7 +479,7 @@ class FlowlyApp(QWidget):
         elif not self.logged_in_user and self.status_label.text().startswith("Working..."):
              self.status_label.setText(f"Status: Please log in or sign up.")
 
-# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+# \\\\\\\\\\--- Sort ---\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     def change_sort_mode(self, index):
         mode = self.sort_combo.currentText().lower().replace(" ", "_") # "due_date" or "urgency"
         if mode != self.current_sort_mode:
@@ -541,7 +579,18 @@ class FlowlyApp(QWidget):
         return sorted_tasks
 
     def sort_and_display_tasks(self):
-        tasks = self.tasks_cache
+
+        tasks_to_process = self.tasks_cache
+        if self.selected_calendar_date:
+            date_filter_tasks = []
+            for task_data in tasks_to_process:
+                date_str = task_data[2]
+                if date_str and date_str != 'None':
+                    q_task_date = QDate.fromString(date_str, 'yyyy-MM-dd')
+                    if q_task_date.isValid() and q_task_date == self.selected_calendar_date:
+                        date_filter_tasks.append(task_data)
+            tasks_to_process = date_filter_tasks
+        tasks = tasks_to_process
 
         # 1. status filter
         selected_status = None
@@ -581,12 +630,13 @@ class FlowlyApp(QWidget):
             final_tasks = self.sort_tasks(category_filtered, sort_mode)
 
         self.populate_task_list(final_tasks)
-
 # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
     # --- set_controls_enabled Method ---
     def set_controls_enabled(self, enabled):
         self.sendTask_btn.setEnabled(enabled); self.record_btn.setEnabled(enabled)
         self.refreshList_btn.setEnabled(enabled); self.task_list.setEnabled(enabled)
+        if self.calendar_widget: self.calendar_widget.setEnabled(enabled)
 
     # --- set_busy_status Method ---
     def set_busy_status(self, message="Working..."):
@@ -597,6 +647,68 @@ class FlowlyApp(QWidget):
     def update_filters(self):
         if not self.is_request_pending:
             self.sort_and_display_tasks()
+
+# \\\\\\\\\\--- Calendar ---\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+    def clear_calendar_selection(self):
+        if self.selected_calendar_date is not None:
+            self.selected_calendar_date = None
+            self.task_list_label.setText("All Dates")
+            self.sort_and_display_tasks()
+
+    def update_calendar_highlights(self):
+        if not self.calendar_widget: return
+        
+        '''
+        1. clear previous formats
+        2. determine type for each date
+        3. apply format to each date according to type'''
+
+        default_format = QTextCharFormat() # empty format to reset
+        today_qdate = QDate.currentDate()
+        to_clear = self.highlighted_dates.copy()
+        to_clear.add(today_qdate)
+        for old_highlight in to_clear:
+            self.calendar_widget.setDateTextFormat(old_highlight, default_format)
+        self.highlighted_dates.clear()
+
+        date_task_info = {}
+        for task_data in self.tasks_cache:
+            task_status = task_data[5]
+            date_str = task_data[2]
+            if task_status == 'pending' and date_str and date_str != 'None':
+                q_task_date = QDate.fromString(date_str, 'yyyy-MM-dd') # parse to QDate object to interact with calendar
+                if q_task_date.isValid():
+                    current_priority_str = date_task_info.get(q_task_date)
+                    is_overdue = q_task_date < today_qdate
+                    task_type_str = 'overdue' if is_overdue else 'upcoming'
+                    if current_priority_str == 'overdue': continue
+                    elif current_priority_str == 'upcoming' and task_type_str == 'overdue': date_task_info[q_task_date] = 'overdue'
+                    elif not current_priority_str: date_task_info[q_task_date] = task_type_str
+        
+        for q_date, task_type in date_task_info.items():
+            fmt = self.calendar_widget.dateTextFormat(q_date)
+            if task_type == 'overdue':
+                fmt.setForeground(QBrush(QColor(255, 0, 0))) # dates with overdue tasks a colored red
+            elif task_type == 'upcoming':
+                fmt.setForeground(QBrush(QColor('#ff914d'))) # dates with upcoming tasks are colored orange
+            self.calendar_widget.setDateTextFormat(q_date, fmt)
+            self.highlighted_dates.add(q_date)
+        
+        today_fmt = self.calendar_widget.dateTextFormat(today_qdate)
+        today_fmt.setBackground(QBrush(QColor('#ffede1'))) # today's date backgound highlighted in orange
+        self.calendar_widget.setDateTextFormat(today_qdate, today_fmt)
+        self.highlighted_dates.add(today_qdate)
+    
+    def handle_calendar_date_clicked(self, q_date):
+        if self.selected_calendar_date == q_date:
+            self.selected_calendar_date = None
+            self.task_list_label.setText("All Dates")
+        else:
+            self.selected_calendar_date = q_date
+            self.task_list_label.setText(f"Tasks for {q_date.toString('yyyy-MM-dd')}")
+            self.calendar_widget.setSelectedDate(q_date)
+        self.sort_and_display_tasks()
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
     # --- populate_task_list Method ---
     def populate_task_list(self, sorted_tasks):
@@ -743,6 +855,10 @@ class FlowlyApp(QWidget):
                 # self.network_worker.close_connection()  
                 # Clear UI immediately
                 self.task_list.clear()
+                self.tasks_cache = []
+                self.selected_calendar_date = None
+                if self.calendar_widget: self.update_calendar_highlights()
+                if hasattr(self, 'task_list_header'): self.task_list_label.setText("All Dates")
                 self.setWindowTitle("Flowly - Task Manager")
                 self.status_label.setText("Status: Logged out.")
                 self.hide() # Hide main window
@@ -766,7 +882,10 @@ if __name__ == "__main__":
     def load_stylesheet(path):
         with open(path, "r") as file:
             return file.read()
-    style = load_stylesheet("style.qss")
-    app.setStyleSheet(style)
+    try:
+        with open("style.qss", "r") as file:
+            app.setStyleSheet(file.read())
+    except FileNotFoundError:
+        print("WARN: style.qss not found, using default QT styling.")
     window = FlowlyApp()
     sys.exit(app.exec_())
