@@ -202,7 +202,7 @@ class TaskServer:
 
                             try:
                                 if time_str_raw:
-                                     # Combine with date if available for context, or parse time alone
+                                     # Combine with date for context
                                      parse_context = f"{date_obj} {time_str_raw}" if date_obj else time_str_raw
                                      parsed_dt = dp.parse(parse_context, languages=['en'])
                                      if parsed_dt: time_obj = parsed_dt.time()

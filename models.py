@@ -71,7 +71,7 @@ class ModelsLoader():
             preds = self.NerModel(input_tensor, mask=mask)[0]  # CRF decode returns list
         return [self.idx2label[idx] for idx in preds[:len(tokens)]]
     def category_predict(self, task_desc):
-        vectorized_task_desc = self.CatVectorizer.transform([task_desc])
+        vectorized_task_desc = self.CatVectorizer.transform([task_desc]) # vectorize the given task description
         predicted_category = self.CatClassifier.predict(vectorized_task_desc)
-        predicted_category = None if np.max(self.CatClassifier.predict_proba(vectorized_task_desc)) < 0.3 else str(predicted_category[0])
+        predicted_category = None if np.max(self.CatClassifier.predict_proba(vectorized_task_desc)) < 0.4 else str(predicted_category[0])
         return predicted_category
