@@ -29,7 +29,6 @@ class TaskServer:
         self.db.debug_print_all_users()
         self._setup_server()
         self.active_users = {} # {username: userid}
-        # self._ensure_test_user_exists() # Let's rely on signup/login for testing now
 
         # SSL context
         self.ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -47,7 +46,7 @@ class TaskServer:
         self.sock.listen()
         print(f"Server listening on {self.host}:{self.port}")
 
-    def handle_client(self, client, addr): # Add addr for better logging
+    def handle_client(self, client, addr): # addr for logging
         print(f"Handling connection from {addr}")
         current_user_id = None
         current_username = None
@@ -184,47 +183,42 @@ class TaskServer:
                             date_str_raw = ' '.join(date_parts)
                             time_str_raw = ' '.join(time_parts)
 
-                            # Parse Date/Time safely
+                            # Parse Date/Time
                             date_obj = None
                             time_obj = None
                             try:
                                 if date_str_raw:
-                                     # Use fuzzy=True for better flexibility if needed
+                                     # parse date expression with dateparser
                                      parsed_dt = dp.parse(date_str_raw, languages=['en'], settings={'DATE_ORDER': 'DMY', 'PREFER_DATES_FROM': 'future'})
-                                     if parsed_dt: date_obj = parsed_dt.date()
+                                     if parsed_dt: date_obj = parsed_dt.date() # have only the date data
                             except Exception as dp_err:
-                                print(f"WARN: Date parsing failed for '{date_str_raw}': {dp_err}")
+                                print(f"Date parsing failed for '{date_str_raw}': {dp_err}")
 
                             try:
                                 if time_str_raw:
-                                     # Combine with date for context
+                                     # combined with date for context
                                      parse_context = f"{date_obj} {time_str_raw}" if date_obj else time_str_raw
                                      parsed_dt = dp.parse(parse_context, languages=['en'])
-                                     if parsed_dt: time_obj = parsed_dt.time()
+                                     if parsed_dt: time_obj = parsed_dt.time() # have only the time data
                             except Exception as dp_err:
-                                print(f"WARN: Time parsing failed for '{time_str_raw}': {dp_err}")
+                                print(f"Time parsing failed for '{time_str_raw}': {dp_err}")
 
-                            # Classify for Category
+                            # Classify task description for category
                             predicted_category = models.category_predict(task_desc_raw)
-                            # vectorized_task_desc = CatVectorizer.transform([task_desc_raw])
-                            # predicted_category = CatClassifier.predict(vectorized_task_desc)
-                            # predicted_category = None if np.max(CatClassifier.predict_proba(vectorized_task_desc)) < 0.3 else str(predicted_category[0])
 
                             task_data = {
-                                'TaskDesc': task_desc_processed if task_desc_processed else task_desc_raw, # Fallback to raw if NER fails
+                                'TaskDesc': task_desc_processed if task_desc_processed else task_desc_raw, # back to raw description if NER fails
                                 'Date': str(date_obj) if date_obj else None,
                                 'Time': str(time_obj) if time_obj else None,
                                 'Category': predicted_category, 
-                                # 'Urgency': request.get('Urgency', 3),   # Allow override or default
-                                'Status': 'pending' # Always start as pending
+                                'Status': 'pending' # pending by default
                             }
-                            print(f"Processed task data: {task_data}")
 
-                            self.db.create_task(user_id=current_user_id, **task_data)
+                            self.db.create_task(user_id=current_user_id, **task_data) # Store the new task in the database
                             print(f"Task stored in database for user {current_user_id} ({current_username})!")
                             self._send_response(conn, {'status':'task_added', 'message': 'Task added successfully', 'action_echo':'add_task'})
                         except Exception as e:
-                            print(f"ERROR: Failed processing/adding task for user {current_user_id} ({current_username}): {e}")
+                            print(f"Failed processing/adding task for user {current_user_id} ({current_username}): {e}")
                             self._send_response(conn, {'status':'error', 'message': f'Error adding task: {e}'})
 
 
@@ -361,19 +355,19 @@ class TaskServer:
             print(f"ERROR: Failed to send response: {e} - Data: {response_data}")
     
     def run(self):
-        while True:
+        while True: # main server loop
             try:
-                conn, addr = self.sock.accept()
+                conn, addr = self.sock.accept() # accept a new connection
                 print(f"Accepted connection from {addr}")
                 client_thread = threading.Thread(
-                    target=self.handle_client, args=(conn, addr), daemon=True # Use daemon threads
-                )
+                    target=self.handle_client, args=(conn, addr), daemon=True
+                ) # create a new thread for each client
                 client_thread.start()
             except KeyboardInterrupt:
                  print("\nShutting down server...")
                  break
             except Exception as e:
-                 print(f"ERROR accepting connection: {e}")
+                 print(f"error accepting connection: {e}")
 
         self.sock.close()
         print("Server socket closed.")

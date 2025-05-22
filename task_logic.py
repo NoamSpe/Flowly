@@ -45,20 +45,20 @@ def calculate_urgency(task_data):
     return urgency_score
 
 def sort_tasks_by_mode(tasks, mode):
-    """Sorts tasks by the given mode ('urgency' or 'due_date')."""
+    """Sorts tasks by the given mode - urgency or due date"""
     if not tasks:
         return []
     
     sorted_tasks = []
     if mode == 'urgency':
         tasks_with_scores = [(calculate_urgency(task), task) for task in tasks]
-        # Primary sort by score (desc), secondary by due date (asc) for tasks with same score
+        # primary sort by urgency score (desc), secondary by due date (asc)
         tasks_with_scores.sort(key=lambda item: (-item[0], get_datetime_from_task(item[1]) or datetime.datetime.max))
         sorted_tasks = [item[1] for item in tasks_with_scores]
     elif mode == 'due_date':
         sorted_tasks = sorted(tasks, key=lambda task: get_datetime_from_task(task) or datetime.datetime.max)
-    else:
-        sorted_tasks = tasks # Should not happen with combobox
+    else: # if mode not recognized
+        sorted_tasks = tasks 
     return sorted_tasks
 
 def get_datetime_from_task(task_data):
@@ -85,13 +85,10 @@ def get_datetime_from_task(task_data):
 
 def filter_and_sort_tasks(tasks_cache, selected_calendar_date, status_filter_state, 
                            category_checkboxes_state, current_sort_mode_ui):
-    """
-    Applies filters and then sorts tasks.
-    status_filter_state: {'all': bool, 'pending': bool, 'done': bool}
-    category_checkboxes_state: {category_name: bool}
-    current_sort_mode_ui: 'due_date' or 'urgency' (from combobox)
-    """
-    from PyQt5.QtCore import QDate # Local import
+    
+    """Applies filters and then sorts tasks."""
+
+    from PyQt5.QtCore import QDate
 
     tasks_to_process = list(tasks_cache)
 
@@ -101,7 +98,7 @@ def filter_and_sort_tasks(tasks_cache, selected_calendar_date, status_filter_sta
         for task_data in tasks_to_process:
             date_str = task_data[2] if len(task_data) > 2 else None
             if date_str and date_str != 'None':
-                q_task_date = QDate.fromString(date_str, 'yyyy-MM-dd')
+                q_task_date = QDate.fromString(date_str, 'yyyy-MM-dd') # Convert from yyyy-MM-dd to QDate
                 if q_task_date.isValid() and q_task_date == selected_calendar_date:
                     date_filter_tasks.append(task_data)
         tasks_to_process = date_filter_tasks
@@ -120,12 +117,12 @@ def filter_and_sort_tasks(tasks_cache, selected_calendar_date, status_filter_sta
     # 3. Category filter
     selected_categories = [cat for cat, checked in category_checkboxes_state.items() if checked]
     if not selected_categories:
-        selected_categories = list(category_checkboxes_state.keys()) # If none checked, show all
-        selected_categories = selected_categories+[None]
+        selected_categories = list(category_checkboxes_state.keys()) # If none checked, show all categories
+        selected_categories = selected_categories+[None] # including tasks that have no category
         
     category_filtered_tasks = []
     for task in filtered_by_status:
-        task_cat = task[4] # if len(task) > 4 else None
+        task_cat = task[4] if len(task) > 4 else None
         if task_cat in selected_categories:
             category_filtered_tasks.append(task)
 
@@ -136,8 +133,9 @@ def filter_and_sort_tasks(tasks_cache, selected_calendar_date, status_filter_sta
         pending_tasks = [task for task in category_filtered_tasks if (task[5] if len(task) > 5 else None) == 'pending']
         done_tasks = [task for task in category_filtered_tasks if (task[5] if len(task) > 5 else None) == 'done']
         
+        # if selected status is all, then pending tasks are sorted by user preference and done tasks are sorted by due datetime
         sorted_pending = sort_tasks_by_mode(pending_tasks, effective_sort_mode)
-        sorted_done = sort_tasks_by_mode(done_tasks, 'due_date') # Done tasks always by due_date
+        sorted_done = sort_tasks_by_mode(done_tasks, 'due_date')
         
         final_tasks = (sorted_pending or []) + (sorted_done or [])
     elif selected_status_str == 'done':

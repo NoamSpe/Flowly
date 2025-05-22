@@ -33,7 +33,7 @@ class FlowlyApp(QWidget):
         # Speech Recognizer Setup
         self.recognizer = sr.Recognizer()
         self.recognizer.pause_threshold = 1.3 # seconds of non-speaking audio before phrase is considered complete
-        self.recognizer.energy_threshold = 4000
+        self.recognizer.energy_threshold = 3000 # adjusted for better recognition in noisy environments
 
         self.setWindowTitle(APP_TITLE_BASE)
         self.setWindowIcon(QIcon(LOGO_SQUARE_PATH))
@@ -487,7 +487,7 @@ class FlowlyApp(QWidget):
             QMessageBox.information(self, "Busy", "Cannot start recording while another action is pending.")
             return
         
-        # Update button state immediately (main thread)
+        # Update button state
         self.update_record_button_signal.emit(False, "Recording...")
         # Start the recording and recognition in a separate thread
         threading.Thread(target=self._record_task_thread_worker, daemon=True).start()
@@ -501,28 +501,26 @@ class FlowlyApp(QWidget):
                 self.update_status_text_signal.emit("Status: Adjusting for ambient noise...")
                 self.recognizer.adjust_for_ambient_noise(source, duration=0.7)
                 self.update_status_text_signal.emit("Status: Listening...")
-                print("DEBUG (FlowlyApp Speech): Listening...")
-                # Listen for the first phrase and extract it into audio data
-                # Increased timeout and phrase_time_limit for potentially longer task descriptions
+                print("Listening...")
                 audio = self.recognizer.listen(source, timeout=7, phrase_time_limit=20)
             
             self.update_status_text_signal.emit("Status: Recognizing...")
-            print("DEBUG (FlowlyApp Speech): Processing audio...")
+            print("Processing audio...")
             recognized_text = self.recognizer.recognize_google(audio).lower()
-            print(f"DEBUG (FlowlyApp Speech): Recognized: {recognized_text}")
+            print(f"Recognized: {recognized_text}")
 
         except sr.WaitTimeoutError:
             error_message = "No speech detected within the time limit."
-            print("DEBUG (FlowlyApp Speech): WaitTimeoutError")
+            print("WaitTimeoutError")
         except sr.UnknownValueError:
             error_message = "Google Speech Recognition could not understand audio."
-            print("DEBUG (FlowlyApp Speech): UnknownValueError")
+            print("UnknownValueError")
         except sr.RequestError as e:
             error_message = f"Could not request results from Google Speech Recognition service; {e}"
-            print(f"DEBUG (FlowlyApp Speech): RequestError: {e}")
+            print(f"RequestError: {e}")
         except Exception as e: # Catch any other unexpected errors during recording/recognition
             error_message = f"An unexpected error occurred during voice recording: {e}"
-            print(f"ERROR (FlowlyApp Speech): Unexpected error: {e}")
+            print(f"Unexpected error: {e}")
         finally:
             if recognized_text:
                 self.update_task_text_field_signal.emit(recognized_text) # Update the text field

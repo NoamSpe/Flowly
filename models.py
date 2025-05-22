@@ -32,7 +32,7 @@ class ModelsLoader():
         self.model = None
         self.paths = {
             'ner_model': 'NER/NERModel.pth',
-            'ner_tokenizer': 'NER/NERtokenizer.pkl',
+            'ner_vocabulary': 'NER/NERVocabulary.pkl',
             'cat_classifier': 'CategoryClassification/CategoryClassifier_Model.pkl',
             'cat_vectorizer': 'CategoryClassification/CategoryClassifier_Vectorizer.pkl'
         }
@@ -40,7 +40,7 @@ class ModelsLoader():
         self.label2idx = {label: idx for idx, label in enumerate(self.LABELS)}
         self.idx2label = {idx: label for label, idx in self.label2idx.items()}
         self.load_ner_model()
-        self.load_ner_tokenizer()
+        self.load_ner_vocabulary()
         self.load_cat_classifier()
 
     def load_ner_model(self):
@@ -52,10 +52,11 @@ class ModelsLoader():
         self.NerModel = BiLSTM_NER(VOCAB_SIZE, EMBEDDING_DIM, HIDDEN_DIM, NUM_CLASSES)
         self.NerModel.load_state_dict(torch.load(self.paths['ner_model']))
         self.NerModel.eval()
-    def load_ner_tokenizer(self):
-        with open(self.paths['ner_tokenizer'], 'rb') as f:  # saved during training
-            tokenizer_dict = pickle.load(f)
-        self.tokenizer = defaultdict(lambda: 1, tokenizer_dict)
+    def load_ner_vocabulary(self):
+        with open(self.paths['ner_vocabulary'], 'rb') as f:  # saved during training
+            vocabulary_dict = pickle.load(f)
+        self.vocab = defaultdict(lambda: 1, vocabulary_dict)
+    
     def load_cat_classifier(self):
         with open(self.paths['cat_classifier'], 'rb') as f:
             self.CatClassifier = pickle.load(f)
@@ -64,13 +65,14 @@ class ModelsLoader():
 
     def NER_predict(self, sentence):
         print("start predicting")
-        tokens = [self.tokenizer[word.strip().lower()] for word in sentence.split()]
+        tokens = [self.vocab[word.strip().lower()] for word in sentence.split()]
         padded = tokens + [0] * (self.MAX_SEQUENCE_LENGTH - len(tokens))
         input_tensor = torch.tensor([padded], dtype=torch.long)
         mask = (input_tensor != 0)
         with torch.no_grad():
             preds = self.NerModel(input_tensor, mask=mask)[0]  # CRF decode returns list
         return [self.idx2label[idx] for idx in preds[:len(tokens)]]
+    
     def category_predict(self, task_desc):
         vectorized_task_desc = self.CatVectorizer.transform([task_desc]) # vectorize the given task description
         predicted_category = self.CatClassifier.predict(vectorized_task_desc)
