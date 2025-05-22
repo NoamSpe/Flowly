@@ -122,28 +122,23 @@ class TaskServer:
 
                     elif action == 'signup':
                         username = request.get('username')
-                        email = request.get('email')
                         password = request.get('password')
 
-                        if not all([username, email, password]):
-                             self._send_response(conn, {'status':'error', 'message':'Missing username, email, or password'})
+                        if not all([username, password]):
+                             self._send_response(conn, {'status':'error', 'message':'Missing username or password'})
                              continue
 
                         # Check for existing user/email (case-insensitive)
                         existing_user = self.db.get_user_by_username(username)
-                        existing_email = self.db.get_user_by_email(email)
 
                         if existing_user:
                             self._send_response(conn, {'status':'error', 'message':'Username already exists'})
-                            continue
-                        if existing_email:
-                            self._send_response(conn, {'status':'error', 'message':'Email already exists'})
                             continue
 
                         try:
                             # *** Hash the password ***
                             hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-                            user_id = self.db.create_user(username, email, hashed_password.decode('utf-8')) # Store hash as string
+                            user_id = self.db.create_user(username, hashed_password.decode('utf-8')) # Store hash as string
                             print(f"DEBUG: User created: ID {user_id}, Username {username} from {addr}")
                             self._send_response(conn, {'status':'success', 'message': 'Signup successful! Please log in.', 'action_echo':'signup'}) # Don't send user_id back directly
                         except Exception as e:

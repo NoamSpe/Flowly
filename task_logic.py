@@ -121,10 +121,11 @@ def filter_and_sort_tasks(tasks_cache, selected_calendar_date, status_filter_sta
     selected_categories = [cat for cat, checked in category_checkboxes_state.items() if checked]
     if not selected_categories:
         selected_categories = list(category_checkboxes_state.keys()) # If none checked, show all
+        selected_categories = selected_categories+[None]
         
     category_filtered_tasks = []
     for task in filtered_by_status:
-        task_cat = task[4] if len(task) > 4 else None
+        task_cat = task[4] # if len(task) > 4 else None
         if task_cat in selected_categories:
             category_filtered_tasks.append(task)
 

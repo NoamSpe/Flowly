@@ -7,10 +7,11 @@ import numpy as np
 
 class BiLSTM_NER(nn.Module):
     def __init__(self, vocab_size, embedding_dim, hidden_dim, num_classes):
+        
         super(BiLSTM_NER, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
         self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True, bidirectional=True)
-        self.dropout = nn.Dropout(0.25)
+        self.dropout = nn.Dropout(0.3)
         self.fc = nn.Linear(hidden_dim * 2, num_classes)  # BiLSTM doubles hidden size
         self.crf = CRF(num_classes)
 

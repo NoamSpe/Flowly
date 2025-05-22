@@ -8,7 +8,7 @@ import time
 class NetworkWorker(QObject):
     response_received = pyqtSignal(dict)
     error_occurred = pyqtSignal(str)
-    _request_finished = pyqtSignal() # Internal signal
+    _request_finished = pyqtSignal()
 
     def __init__(self, host, port):
         super().__init__()
@@ -20,24 +20,23 @@ class NetworkWorker(QObject):
         self.current_user = None
         self.lock = threading.Lock()
 
-    # --- connect_socket Method ---
     def connect_socket(self):
         with self.lock:
             if self.client_socket:
-                try: self.client_socket.close()
+                try: self.client_socket.close() # Close existing socket
                 except Exception: pass
             try:
                 context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
                 context.load_verify_locations('server.crt')
 
                 plain_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.client_socket = context.wrap_socket(plain_sock, server_hostname=self.host)
+                self.client_socket = context.wrap_socket(plain_sock, server_hostname=self.host) # wrap socket with SSL
 
-                self.client_socket.settimeout(10.0)
+                self.client_socket.settimeout(10.0) # timeout for connection
                 self.client_socket.connect((self.host, self.port))
                 self.is_connected = True
                 self.receive_buffer = b""
-                print("DEBUG: Socket connected")
+                print("Socket connected")
                 return True
             except (socket.error, OSError) as e:
                 print(f"ERROR: Socket connection failed: {e}")
@@ -45,8 +44,7 @@ class NetworkWorker(QObject):
                 self.error_occurred.emit(f"Connection failed: {e}")
                 return False
 
-    # --- _send_request_internal Method ---
-    def _send_request_internal(self, request_data):
+    def _send_request_internal(self, request_data): # Send request to server
         with self.lock:
             if not self.is_connected or self.client_socket is None:
                 if not self.connect_socket():
@@ -77,7 +75,6 @@ class NetworkWorker(QObject):
                     self.error_occurred.emit("Failed to send message and reconnect.")
                     self._request_finished.emit(); return False
 
-    # --- _receive_response_internal Method ---
     def _receive_response_internal(self):
         with self.lock:
             if not self.is_connected or self.client_socket is None:
@@ -110,7 +107,6 @@ class NetworkWorker(QObject):
                     print(f"ERROR: Overall receive timeout."); self.error_occurred.emit("Receive timeout.")
                     self._request_finished.emit(); return None
 
-    # --- process_request Method ---
     @pyqtSlot(dict)
     def process_request(self, request_data):
         print(f"DEBUG: Worker received request: {request_data}")
@@ -134,13 +130,11 @@ class NetworkWorker(QObject):
 
         self._request_finished.emit()
 
-    # --- set_current_user Method ---
     @pyqtSlot(str)
     def set_current_user(self, username):
         print(f"DEBUG: Worker received set_current_user: '{username}'")
         self.current_user = username if username else None
 
-    # --- close_connection Method ---
     def close_connection(self):
          with self.lock:
             if self.client_socket:

@@ -25,7 +25,8 @@ class TaskItemWidget(QWidget):
         self.delete_button = QPushButton("Del"); self.delete_button.setFixedSize(40, 25); self.delete_button.setStyleSheet("color: red;")
         self.delete_button.clicked.connect(lambda: self.delete_requested.emit(self.task_id))
         layout.addWidget(self.checkbox); layout.addWidget(self.desc_label, 1); layout.addWidget(self.datetime_label)
-        layout.addSpacerItem(QSpacerItem(10, 0)); layout.addWidget(cat_label); layout.addSpacerItem(QSpacerItem(10, 0))
+        layout.addSpacerItem(QSpacerItem(10, 0))
+        if category!=None:layout.addWidget(cat_label); layout.addSpacerItem(QSpacerItem(10, 0))
         layout.addWidget(self.edit_button); layout.addWidget(self.delete_button)
         self.setAttribute(Qt.WA_StyledBackground)  # Enable custom styling
         self.setStyleSheet("""TaskItemWidget {background: #ffffff;}""")

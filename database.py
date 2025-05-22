@@ -2,7 +2,7 @@ import sqlite3
 from contextlib import contextmanager
 
 class Database:
-    def __init__(self, db_name='tasks.db'):
+    def __init__(self, db_name='db.db'):
         self.db_name = db_name
         self._init_db()
 
@@ -22,7 +22,6 @@ class Database:
                 CREATE TABLE IF NOT EXISTS Users (
                     UserID INTEGER PRIMARY KEY AUTOINCREMENT,
                     Username TEXT UNIQUE NOT NULL,
-                    Email TEXT UNIQUE NOT NULL,
                     PasswordHash TEXT NOT NULL,
                     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -37,7 +36,7 @@ class Database:
                     Date DATE,
                     Time TIME,
                     Category TEXT,
-                    
+
                     Status TEXT DEFAULT 'pending',
                     CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -95,16 +94,6 @@ class Database:
             cursor.execute("DELETE FROM Tasks WHERE TaskID = ?", (task_id,))
             conn.commit()
 
-    def get_user_by_email(self, email):
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT UserID, Username, PasswordHash 
-                FROM Users 
-                WHERE LOWER(TRIM(Email)) = LOWER(TRIM(?))
-            """, (email,))
-            return cursor.fetchone()
-
     def get_task(self, task_id):
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -115,13 +104,13 @@ class Database:
             """, (task_id,))
             return cursor.fetchone()
 
-    def create_user(self, username, email, password_hash):
+    def create_user(self, username, password_hash):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO Users (Username, Email, PasswordHash)
-                VALUES (?, ?, ?)
-            ''', (username, email, password_hash))
+                INSERT INTO Users (Username, PasswordHash)
+                VALUES (?, ?)
+            ''', (username, password_hash))
             conn.commit()
             return cursor.lastrowid  # Returns the new UserID
 

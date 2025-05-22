@@ -9,17 +9,17 @@ from PyQt5.QtGui import QPixmap, QFont, QTextCharFormat, QBrush, QColor
 
 from app_config import LOGO_TEXT_TRANSPARENT_PATH, CALENDAR_LOCALE, TASK_CATEGORIES
 
-def setup_main_ui(app_instance):
+def setup_main_ui(app):
     """Sets up the main window UI elements for the FlowlyApp instance."""
-    app_instance.layout = QVBoxLayout(app_instance)
+    app.layout = QVBoxLayout(app)
 
     # Logo
-    app_instance.logo_label = QLabel(app_instance)
+    app.logo_label = QLabel(app)
     logo_pixmap = QPixmap(LOGO_TEXT_TRANSPARENT_PATH)
     logo_width = 150
     scaled_pixmap = logo_pixmap.scaledToWidth(logo_width, Qt.SmoothTransformation)
-    app_instance.logo_label.setPixmap(scaled_pixmap)
-    app_instance.layout.addWidget(app_instance.logo_label, alignment=Qt.AlignCenter)
+    app.logo_label.setPixmap(scaled_pixmap)
+    app.layout.addWidget(app.logo_label, alignment=Qt.AlignCenter)
 
     content_layout = QHBoxLayout()
 
@@ -27,44 +27,43 @@ def setup_main_ui(app_instance):
     cal_pane_layout = QVBoxLayout()
     cal_title_label = QLabel("Filter by Date:")
     cal_title_label.setAlignment(Qt.AlignCenter)
-    app_instance.calendar_widget = QCalendarWidget()
-    app_instance.calendar_widget.setGridVisible(True)
-    app_instance.calendar_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding) # Calendar takes vertical space
-    app_instance.calendar_widget.setVerticalHeaderFormat(QCalendarWidget.NoVerticalHeader)
-    app_instance.calendar_widget.setLocale(QLocale(CALENDAR_LOCALE))
-    app_instance.calendar_widget.clicked[QDate].connect(app_instance.handle_calendar_date_clicked)
+    app.calendar_widget = QCalendarWidget()
+    app.calendar_widget.setGridVisible(True)
+    app.calendar_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding) # Calendar takes vertical space
+    app.calendar_widget.setVerticalHeaderFormat(QCalendarWidget.NoVerticalHeader)
+    app.calendar_widget.setLocale(QLocale(CALENDAR_LOCALE))
+    app.calendar_widget.clicked[QDate].connect(app.handle_calendar_date_clicked)
     
     cal_pane_layout.addWidget(cal_title_label)
-    cal_pane_layout.addWidget(app_instance.calendar_widget, 1)
+    cal_pane_layout.addWidget(app.calendar_widget, 1)
 
-    app_instance.clearDateFilter_btn = QPushButton("Show All Dates")
-    app_instance.clearDateFilter_btn.clicked.connect(app_instance.clear_calendar_selection)
-    cal_pane_layout.addWidget(app_instance.clearDateFilter_btn)
-    # cal_pane_layout.addStretch(1) # Removed stretch to allow calendar to expand naturally
+    app.clearDateFilter_btn = QPushButton("Show All Dates")
+    app.clearDateFilter_btn.clicked.connect(app.clear_calendar_selection)
+    cal_pane_layout.addWidget(app.clearDateFilter_btn)
 
     uni_format = QTextCharFormat()
     uni_format.setForeground(QBrush(QColor('#000000')))
     for day_int in range(1, 8): # Qt.Monday is 1, Qt.Sunday is 7
-        app_instance.calendar_widget.setWeekdayTextFormat(Qt.DayOfWeek(day_int), uni_format)
+        app.calendar_widget.setWeekdayTextFormat(Qt.DayOfWeek(day_int), uni_format)
     
-    content_layout.addLayout(cal_pane_layout, 0) # Calendar pane, less stretch factor
+    # content_layout.addLayout(cal_pane_layout, 0) # Calendar pane, less stretch factor
 
     # --- Task Area Pane ---
     task_area_layout = QVBoxLayout()
 
     # Input Area
     input_layout = QHBoxLayout()
-    app_instance.text_field = QLineEdit()
-    app_instance.text_field.setPlaceholderText("Enter new task...")
-    app_instance.text_field.returnPressed.connect(app_instance.send_task)
-    app_instance.sendTask_btn = QPushButton("Add Task")
-    app_instance.sendTask_btn.clicked.connect(app_instance.send_task)
-    app_instance.sendTask_btn.setObjectName("SendTaskBtn")
-    app_instance.record_btn = QPushButton("Record")
-    app_instance.record_btn.clicked.connect(app_instance.record_task)
-    input_layout.addWidget(app_instance.text_field, 1)
-    input_layout.addWidget(app_instance.sendTask_btn)
-    input_layout.addWidget(app_instance.record_btn)
+    app.text_field = QLineEdit()
+    app.text_field.setPlaceholderText("Enter new task...")
+    app.text_field.returnPressed.connect(app.send_task)
+    app.sendTask_btn = QPushButton("Add Task")
+    app.sendTask_btn.clicked.connect(app.send_task)
+    app.sendTask_btn.setObjectName("SendTaskBtn")
+    app.record_btn = QPushButton("Record")
+    app.record_btn.clicked.connect(app.record_task)
+    input_layout.addWidget(app.text_field, 1)
+    input_layout.addWidget(app.sendTask_btn)
+    input_layout.addWidget(app.record_btn)
     task_area_layout.addLayout(input_layout)
 
     # List Controls
@@ -75,85 +74,95 @@ def setup_main_ui(app_instance):
     status_filter_label = QLabel("Filter by Status:")
     status_filter_layout.addWidget(status_filter_label)
     status_radios_layout = QHBoxLayout()
-    app_instance.Rstatus_all = QRadioButton("All")
-    app_instance.Rstatus_pending = QRadioButton("Pending")
-    app_instance.Rstatus_done = QRadioButton("Done")
-    app_instance.Rstatus_pending.setChecked(True)
-    status_radios_layout.addWidget(app_instance.Rstatus_all)
-    status_radios_layout.addWidget(app_instance.Rstatus_pending)
-    status_radios_layout.addWidget(app_instance.Rstatus_done)
+    app.Rstatus_all = QRadioButton("All")
+    app.Rstatus_pending = QRadioButton("Pending")
+    app.Rstatus_done = QRadioButton("Done")
+    app.Rstatus_pending.setChecked(True)
+    status_radios_layout.addWidget(app.Rstatus_all)
+    status_radios_layout.addWidget(app.Rstatus_pending)
+    status_radios_layout.addWidget(app.Rstatus_done)
     status_filter_layout.addLayout(status_radios_layout)
     # Connect only one radio button from the group is enough if they are exclusive
-    app_instance.Rstatus_all.toggled.connect(app_instance.update_filters_display)
-    app_instance.Rstatus_pending.toggled.connect(app_instance.update_filters_display)
+    app.Rstatus_all.toggled.connect(app.update_filters_display)
+    app.Rstatus_pending.toggled.connect(app.update_filters_display)
     # app_instance.Rstatus_done.toggled.connect(app_instance.update_filters_display) # Handled by the one that becomes true
 
     list_controls_layout.addLayout(status_filter_layout)
+
     list_controls_layout.addSpacerItem(QSpacerItem(20, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
     # Category filter
-    app_instance.category_checkboxes = {}
+    app.category_checkboxes = {}
     category_filter_layout = QVBoxLayout()
     category_filter_label = QLabel("Filter by Category:")
     category_filter_layout.addWidget(category_filter_label)
     category_checkboxes_layout = QHBoxLayout()
-    for cat in TASK_CATEGORIES: # Use from app_config
+    for cat in TASK_CATEGORIES: # from app_config
         cb = QCheckBox(cat)
-        app_instance.category_checkboxes[cat] = cb
-        cb.stateChanged.connect(app_instance.update_filters_display)
+        app.category_checkboxes[cat] = cb
+        cb.stateChanged.connect(app.update_filters_display)
         category_checkboxes_layout.addWidget(cb)
     category_filter_layout.addLayout(category_checkboxes_layout)
     list_controls_layout.addLayout(category_filter_layout)
+
     list_controls_layout.addSpacerItem(QSpacerItem(20, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
     # Sort Control
     sort_layout_container = QVBoxLayout() # Use QVBoxLayout to align with other filters
     sort_controls_layout = QHBoxLayout()
     sort_label = QLabel("Sort by:")
-    app_instance.sort_combo = QComboBox()
-    app_instance.sort_combo.addItems(["Due Date", "Urgency"])
-    app_instance.sort_combo.currentIndexChanged.connect(app_instance.change_sort_mode)
+    app.sort_combo = QComboBox()
+    app.sort_combo.addItems(["Due Date", "Urgency"])
+    app.sort_combo.currentIndexChanged.connect(app.change_sort_mode)
     sort_controls_layout.addWidget(sort_label)
-    sort_controls_layout.addWidget(app_instance.sort_combo)
-    sort_controls_layout.addStretch() # Push to left if needed
+    sort_controls_layout.addWidget(app.sort_combo)
+    # sort_controls_layout.addStretch() # Push to left if needed
     sort_layout_container.addLayout(sort_controls_layout)
-    sort_layout_container.addStretch(1) # Add stretch to push it up if space allows
+    # sort_layout_container.addStretch(1) # Add stretch to push it up if space allows
 
     list_controls_layout.addLayout(sort_layout_container)
     task_area_layout.addLayout(list_controls_layout)
 
+    list_label_layout = QVBoxLayout()
+
     # Task List Label
-    app_instance.task_list_label = QLabel("Showing Tasks")
-    app_instance.task_list_label.setStyleSheet("font-weight: bold; padding: 5px 0px;")
-    task_area_layout.addWidget(app_instance.task_list_label)
+    app.task_list_label = QLabel("Showing Tasks")
+    app.task_list_label.setStyleSheet("font-weight: bold; padding: 5px 0px;")
+    list_label_layout.addWidget(app.task_list_label)
 
     # Task List
-    app_instance.task_list = QListWidget()
-    app_instance.task_list.setSelectionMode(QListWidget.NoSelection)
-    app_instance.task_list.setFocusPolicy(Qt.NoFocus)
-    app_instance.task_list.setContextMenuPolicy(Qt.CustomContextMenu)
-    app_instance.task_list.customContextMenuRequested.connect(app_instance.show_task_context_menu)
-    task_area_layout.addWidget(app_instance.task_list, 1)
+    app.task_list = QListWidget()
+    app.task_list.setSelectionMode(QListWidget.NoSelection)
+    app.task_list.setFocusPolicy(Qt.NoFocus)
+    app.task_list.setContextMenuPolicy(Qt.CustomContextMenu)
+    app.task_list.customContextMenuRequested.connect(app.show_task_context_menu)
+    list_label_layout.addWidget(app.task_list, 1)
+
+    cal_list_layout = QHBoxLayout()
+    cal_list_layout.addLayout(cal_pane_layout)
+    cal_list_layout.addLayout(list_label_layout, 1)
+
+    task_area_layout.addLayout(cal_list_layout, 1)
 
     # Button Layout
     button_layout = QHBoxLayout()
-    app_instance.refreshList_btn = QPushButton("Refresh List")
-    app_instance.refreshList_btn.clicked.connect(app_instance.request_get_tasks)
-    app_instance.logout_btn = QPushButton("Logout")
-    app_instance.logout_btn.clicked.connect(app_instance.handle_logout)
+    app.refreshList_btn = QPushButton("Refresh List")
+    app.refreshList_btn.clicked.connect(app.request_get_tasks)
+    app.logout_btn = QPushButton("Logout")
+    app.logout_btn.clicked.connect(app.handle_logout)
     button_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
-    button_layout.addWidget(app_instance.refreshList_btn)
-    button_layout.addWidget(app_instance.logout_btn)
+    button_layout.addWidget(app.refreshList_btn)
+    button_layout.addWidget(app.logout_btn)
     task_area_layout.addLayout(button_layout)
 
     content_layout.addLayout(task_area_layout, 1) # Task area, higher stretch factor
 
-    app_instance.layout.addLayout(content_layout)
+    app.layout.addLayout(content_layout)
 
     # Status Bar
-    app_instance.status_label = QLabel("Status: Initializing...")
-    app_instance.status_label.setStyleSheet("color: gray;")
-    app_instance.layout.addWidget(app_instance.status_label)
+    app.status_label = QLabel("Status: Initializing...")
+    app.status_label.setStyleSheet("color: gray;")
+    app.layout.addWidget(app.status_label)
 
 
 def create_login_dialog(parent_widget):

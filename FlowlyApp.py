@@ -1,19 +1,19 @@
 # FlowlyApp.py
 import sys
 import threading
-import speech_recognition as sr # For speech recognition
+import speech_recognition as sr
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QListWidgetItem, QInputDialog,
-                             QMessageBox, QMenu, QDialog) # Added QDialog
+                             QMessageBox, QMenu, QDialog)
 from PyQt5.QtCore import (pyqtSignal, Qt, QThread, pyqtSlot,
-                          QPoint, QTimer, QDate) # Removed Q_ARG, QMetaObject
+                          QPoint, QTimer, QDate)
 from PyQt5.QtGui import QIcon
 
 # Local imports
 from client_network import NetworkWorker
 from gui_task_widget import TaskItemWidget
-import gui_components    # For UI setup functions
-import task_logic       # For task processing functions
+import gui_components
+import task_logic
 from app_config import (SERVER_HOST, SERVER_PORT, LOGO_SQUARE_PATH, APP_TITLE_BASE,
                         STYLESHEET_PATH)
 
@@ -22,10 +22,10 @@ class FlowlyApp(QWidget):
     request_network_action = pyqtSignal(dict)
     set_worker_user = pyqtSignal(str)
 
-    # Signals for UI updates from threads (like speech recognition)
-    update_record_button_signal = pyqtSignal(bool, str) # (enabled, text)
-    update_status_text_signal = pyqtSignal(str)         # Renamed for clarity
-    update_task_text_field_signal = pyqtSignal(str)     # Renamed for clarity
+    # Signals for UI updates from threads
+    update_record_button_signal = pyqtSignal(bool, str)
+    update_status_text_signal = pyqtSignal(str)
+    update_task_text_field_signal = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -33,7 +33,7 @@ class FlowlyApp(QWidget):
         # Speech Recognizer Setup
         self.recognizer = sr.Recognizer()
         self.recognizer.pause_threshold = 1.3 # seconds of non-speaking audio before phrase is considered complete
-        self.recognizer.energy_threshold = 4000 # higher values mean it's less sensitive to background noise
+        self.recognizer.energy_threshold = 4000
 
         self.setWindowTitle(APP_TITLE_BASE)
         self.setWindowIcon(QIcon(LOGO_SQUARE_PATH))
@@ -128,21 +128,12 @@ class FlowlyApp(QWidget):
                                 "Must be at least 8 characters long and include at least one uppercase letter, "
                                 "one lowercase letter, and one digit.")
             return
-        
-        email, ok = QInputDialog.getText(dialog_instance, "Sign Up - Email", "Enter your email address:")
-        if not ok or not email.strip(): # Also check if email is empty after stripping
-            QMessageBox.warning(dialog_instance, "Input Error", "A valid email address is required for sign up.")
-            return
-        # Basic email format check (not exhaustive)
-        if "@" not in email or "." not in email.split('@')[-1]:
-            QMessageBox.warning(dialog_instance, "Input Error", "Please enter a valid email address format.")
-            return
 
         if self.is_request_pending:
             QMessageBox.information(dialog_instance, "Busy", "Processing a previous request. Please wait.")
             return
         self.set_busy_status("Signing up...")
-        request = {'action': 'signup', 'username': username, 'email': email.strip(), 'password': password}
+        request = {'action': 'signup', 'username': username, 'password': password}
         self._pending_dialog = dialog_instance
         self.request_network_action.emit(request)
 
@@ -181,7 +172,7 @@ class FlowlyApp(QWidget):
                     if hasattr(self,'password_edit'): self.password_edit.clear()
                     if hasattr(self,'username_edit'): self.username_edit.setFocus()
                 else:
-                    QMessageBox.critical(local_dialog_ref, "Signup Failed", message or "Could not create account. Username or email may already exist.")
+                    QMessageBox.critical(local_dialog_ref, "Signup Failed", message or "Could not create account. Username may already exist.")
                 self._pending_dialog = None # Dialog handled
 
         elif self.logged_in_user: # Other actions for logged-in users
