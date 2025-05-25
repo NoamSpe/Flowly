@@ -5,7 +5,7 @@ from database import Database
 import json
 import pickle
 import dateparser as dp
-import bcrypt # <-- Import bcrypt
+import bcrypt
 import ssl
 import numpy as np
 
@@ -19,14 +19,12 @@ from models import ModelsLoader
 # Models loading
 models = ModelsLoader()
 
-# ---------------------------------------- SERVER ----------------------------------------
 
 class TaskServer:
     def __init__(self, host='0.0.0.0', port=4320):
         self.host = host
         self.port = port
         self.db = Database()
-        self.db.debug_print_all_users()
         self._setup_server()
         self.active_users = {} # {username: userid}
 
@@ -57,25 +55,23 @@ class TaskServer:
             print(f"SSL handshake completed with {addr}")
 
             while True:
-                # Improved message receiving: Buffer until newline
+                # Buffer until newline
                 buffer = b""
                 while True:
                     chunk = conn.recv(1024)
                     if not chunk:
-                         # Client disconnected gracefully
                          raise ConnectionResetError("Client disconnected")
                     buffer += chunk
-                    # Use newline as a simple message delimiter
+                    # check for newline (message delimiter)
                     if b'\n' in buffer:
                         message_data, buffer = buffer.split(b'\n', 1)
                         message_str = message_data.decode('utf-8').strip()
-                        if message_str: # Avoid processing empty strings
-                             break # Got a message
-                    # Optional: Add a timeout or max buffer size here to prevent memory issues
-                    if len(buffer) > 1024 * 10: # e.g., 10KB limit
-                        print(f"Warning: Buffer exceeded limit for {addr}. Closing connection.")
+                        if message_str: # not processing empty strings
+                             break # got a message
+                    if len(buffer) > 1024 * 10: # 10KB limit
+                        print(f"Buffer exceeded limit for {addr}. Closing connection.")
                         conn.close()
-                        return # Exit handler
+                        return # exit handler
 
                 if not message_str:
                      print(f"Received empty message or only whitespace from {addr}, continuing...")
@@ -95,29 +91,29 @@ class TaskServer:
                             self._send_response(conn, {'status': 'failed', 'message': 'Username and password required'})
                             continue
 
-                        print(f"DEBUG: Login attempt for username: '{username_attempt}' from {addr}")
+                        print(f"Login attempt for username: '{username_attempt}' from {addr}")
                         user_info = self.db.get_user_by_username(username_attempt)
-                        print(f"DEBUG: Retrieved user info: {user_info} for {addr}")
+                        print(f"Retrieved user info: {user_info} for {addr}")
 
                         if user_info:
                             user_id, db_username, stored_hash_str = user_info
                             stored_hash = stored_hash_str.encode('utf-8') # Get hash as bytes
 
-                            # *** Verify Password ***
+                            # Verify Password
                             if bcrypt.checkpw(password_attempt, stored_hash):
-                                print(f"DEBUG: Login successful for User ID: {user_id}, Username: {db_username} from {addr}")
-                                self.active_users[db_username] = user_id # Store mapping
-                                current_user_id = user_id             # Track for this connection
+                                print(f"Login successful for User ID: {user_id}, Username: {db_username} from {addr}")
+                                self.active_users[db_username] = user_id # track active user
+                                current_user_id = user_id # Track for this connection
                                 current_username = db_username
                                 self._send_response(conn, {'status': 'success', 'username': db_username, 'action_echo':'login'})
                             else:
-                                print(f"DEBUG: Invalid password for username: '{username_attempt}' from {addr}")
+                                print(f"Invalid password for username: '{username_attempt}' from {addr}")
                                 self._send_response(conn, {'status': 'failed', 'message': 'Invalid username or password', 'action_echo':'login'})
                         else:
                             error_msg = f"User '{username_attempt}' not found"
-                            print(f"DEBUG: {error_msg} for {addr}")
+                            print(f"{error_msg} for {addr}")
                             self._send_response(conn, {'status': 'failed', 'message': 'Invalid username or password', 'action_echo':'login'}) # Generic message for security
-                        continue # Move to next message
+                        continue # move to next message
 
                     elif action == 'signup':
                         username = request.get('username')
@@ -127,7 +123,7 @@ class TaskServer:
                              self._send_response(conn, {'status':'error', 'message':'Missing username or password'})
                              continue
 
-                        # Check for existing user/email (case-insensitive)
+                        # Check for existing username
                         existing_user = self.db.get_user_by_username(username)
 
                         if existing_user:
@@ -135,27 +131,26 @@ class TaskServer:
                             continue
 
                         try:
-                            # *** Hash the password ***
+                            # Hash the password
                             hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
                             user_id = self.db.create_user(username, hashed_password.decode('utf-8')) # Store hash as string
-                            print(f"DEBUG: User created: ID {user_id}, Username {username} from {addr}")
+                            print(f"User created: ID {user_id}, Username {username} from {addr}")
                             self._send_response(conn, {'status':'success', 'message': 'Signup successful! Please log in.', 'action_echo':'signup'}) # Don't send user_id back directly
                         except Exception as e:
-                            print(f"ERROR: Signup failed for {username} from {addr} - {e}")
+                            print(f"Signup failed for {username} from {addr} - {e}")
                             self._send_response(conn, {'status':'error', 'message':'Signup failed. Please try again.', 'action_echo':'signup'})
                         continue # Move to next message
 
-                    # --- Actions requiring login ---
-                    # Check if user is logged in for subsequent actions
+                    # Actions requiring login
+                    # Check if user is logged in for next actions
                     if current_user_id is None:
-                         print(f"WARN: Action '{action}' attempted without login from {addr}. Denying.")
+                         print(f"Action '{action}' attempted without login from {addr}. Denying.")
                          self._send_response(conn, {'status': 'error', 'message': 'Not logged in'})
-                         continue # Skip to next message
+                         continue # skip to next message
 
-                    # Get username associated with this connection's user_id if needed
                     request_username = request.get('user') # Client might still send username
                     if request_username != current_username:
-                         print(f"WARN: Mismatched username in request ('{request_username}') vs logged in user ('{current_username}') for action '{action}' from {addr}. Using logged in user.")
+                         print(f"Mismatched username in request ('{request_username}') vs logged in user ('{current_username}') for action '{action}' from {addr}. Using logged in user.")
                          # Proceed using current_username and current_user_id
 
                     if action == 'get_tasks':
@@ -221,8 +216,7 @@ class TaskServer:
                             print(f"Failed processing/adding task for user {current_user_id} ({current_username}): {e}")
                             self._send_response(conn, {'status':'error', 'message': f'Error adding task: {e}'})
 
-
-                    elif action == 'update_task_status': # Renamed from 'update_status' for clarity
+                    elif action == 'update_task_status':
                         task_id = request.get('task_id')
                         status = request.get('status')
                         if not task_id or status not in ['pending', 'done']:
@@ -230,7 +224,7 @@ class TaskServer:
                             continue
                         # Verify ownership before updating
                         task_info = self.db.get_task(task_id) # Fetch task to check UserID
-                        if task_info and task_info[1] == current_user_id: # Assuming UserID is the second column (index 1) in get_task result
+                        if task_info and task_info[1] == current_user_id: # Assuming UserID is in index 1
                            self.db.update_task_status(task_id, status)
                            self._send_response(conn, {'status': 'status_updated', 'task_id': task_id, 'new_status': status, 'action_echo':'update_task_status'})
                         elif task_info:
@@ -239,10 +233,9 @@ class TaskServer:
                         else:
                            self._send_response(conn, {'status': 'error', 'message': 'Task not found', 'action_echo':'update_task_status'})
 
-
                     elif action == 'update_task':
                         task_id = request.get('task_id')
-                        update_data = request.get('update_data') # This should be a dict
+                        update_data = request.get('update_data')
                         if not task_id or not isinstance(update_data, dict):
                              self._send_response(conn, {'status':'error', 'message':'Invalid task ID or update data format', 'action_echo':'update_task'})
                              continue
@@ -251,7 +244,6 @@ class TaskServer:
                         task_info = self.db.get_task(task_id)
                         if task_info and task_info[1] == current_user_id: # Check UserID at index 1
                             try:
-                                # Optional: Sanitize/validate update_data keys/values here
                                 self.db.update_task(task_id, **update_data)
                                 self._send_response(conn, {'status':'task_updated', 'task_id': task_id, 'action_echo':'update_task'})
                             except Exception as e:
@@ -262,7 +254,6 @@ class TaskServer:
                             self._send_response(conn, {'status':'error', 'message':'Unauthorized: You do not own this task', 'action_echo':'update_task'})
                         else:
                             self._send_response(conn, {'status': 'error', 'message': 'Task not found', 'action_echo':'update_task'})
-
 
                     elif action == 'delete_task':
                         task_id = request.get('task_id')
@@ -280,7 +271,7 @@ class TaskServer:
                         else:
                             self._send_response(conn, {'status': 'error', 'message': 'Task not found', 'action_echo':'delete_task'})
 
-                    elif action == 'get_task': # Keep for fetching details for edit form
+                    elif action == 'get_task': # for fetching details for edit form
                         task_id = request.get('task_id')
                         if not task_id:
                              self._send_response(conn, {'status':'error', 'message':'Task ID required', 'action_echo':'get_task'})
@@ -290,14 +281,12 @@ class TaskServer:
                              # Convert tuple to dict for easier client handling
                              task_dict = {
                                 'TaskID': task_info[0],
-                                'UserID': task_info[1], # Include UserID
+                                'UserID': task_info[1],
                                 'TaskDesc': task_info[2],
                                 'Date': task_info[3],
                                 'Time': task_info[4],
                                 'Category': task_info[5],
-                                # 'Urgency': task_info[6],
                                 'Status': task_info[6]
-                                # Add CreatedAt, UpdatedAt if needed
                              }
                              self._send_response(conn, {'status': 'success', 'task': task_dict, 'action_echo':'get_task'})
                         elif task_info:
@@ -309,11 +298,10 @@ class TaskServer:
                         print(f"WARN: Unknown action '{action}' received from {current_username or addr}")
                         self._send_response(conn, {'status':'error', 'message':f'Unknown action: {action}', 'action_echo':'get_task'})
 
-
                 except json.JSONDecodeError:
                     print(f"ERROR: Invalid JSON received from {current_username or addr}: {message_str}")
                     self._send_response(conn, {'status':'error','message':'Invalid request format (bad JSON)'})
-                except Exception as e: # Catch broader errors during request processing
+                except Exception as e: # any other error
                     print(f"ERROR: Exception processing request from {current_username or addr}: {e}")
                     self._send_response(conn, {'status':'error','message':f'Server error processing request: {e}'})
 
@@ -325,22 +313,21 @@ class TaskServer:
             try:
                 self._send_response(conn, {'status':'error','message':'An unexpected server error occurred.'})
             except:
-                pass # Ignore if sending fails
+                pass
         finally:
             if conn:
                 try:
                     conn.close()
                 except Exception as e:
                     print(f"Error closing SSL socket for {addr}: {e}")
-            # Clean up active user entry if they were logged in
+            # remove active user entry if they were logged in
             if current_username and current_username in self.active_users:
                  # Check if the stored user_id matches the one for this session before deleting
                  if self.active_users[current_username] == current_user_id:
                     del self.active_users[current_username]
                     print(f"User '{current_username}' logged out from {addr}.")
                  else:
-                     # This might happen if the user logs in again from elsewhere
-                     print(f"WARN: User '{current_username}' from {addr} disconnected, but active session belongs to a different connection.")
+                    print(f"WARN: User '{current_username}' from {addr} disconnected, but active session belongs to a different connection.")
 
             conn.close()
             print(f"Connection closed for {addr}")
@@ -350,7 +337,6 @@ class TaskServer:
         try:
             message = json.dumps(response_data) + '\n' # Add newline
             conn.sendall(message.encode('utf-8'))
-            # print(f"Sent: {response_data}") # Optional: Debug logging
         except (OSError, ConnectionResetError, BrokenPipeError) as e:
             print(f"ERROR: Failed to send response: {e} - Data: {response_data}")
     
@@ -364,10 +350,10 @@ class TaskServer:
                 ) # create a new thread for each client
                 client_thread.start()
             except KeyboardInterrupt:
-                 print("\nShutting down server...")
-                 break
+                print("\nShutting down server...")
+                break
             except Exception as e:
-                 print(f"error accepting connection: {e}")
+                print(f"error accepting connection: {e}")
 
         self.sock.close()
         print("Server socket closed.")

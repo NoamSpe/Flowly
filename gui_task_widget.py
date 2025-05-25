@@ -28,7 +28,7 @@ class TaskItemWidget(QWidget):
         layout.addSpacerItem(QSpacerItem(10, 0))
         if category!=None:layout.addWidget(cat_label); layout.addSpacerItem(QSpacerItem(10, 0))
         layout.addWidget(self.edit_button); layout.addWidget(self.delete_button)
-        self.setAttribute(Qt.WA_StyledBackground)  # Enable custom styling
+        self.setAttribute(Qt.WA_StyledBackground)  # enable custom styling
         self.setStyleSheet("""TaskItemWidget {background: #ffffff;}""")
 
         self.update_appearance()

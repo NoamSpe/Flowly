@@ -78,17 +78,17 @@ def setup_main_ui(app):
     app.Rstatus_pending = QRadioButton("Pending")
     app.Rstatus_done = QRadioButton("Done")
     app.Rstatus_pending.setChecked(True)
+
     status_radios_layout.addWidget(app.Rstatus_all)
     status_radios_layout.addWidget(app.Rstatus_pending)
     status_radios_layout.addWidget(app.Rstatus_done)
     status_filter_layout.addLayout(status_radios_layout)
-    # Connect only one radio button from the group is enough if they are exclusive
+
     app.Rstatus_all.toggled.connect(app.update_filters_display)
     app.Rstatus_pending.toggled.connect(app.update_filters_display)
-    # app_instance.Rstatus_done.toggled.connect(app_instance.update_filters_display) # Handled by the one that becomes true
+    # app_instance.Rstatus_done.toggled.connect(app_instance.update_filters_display) # Handled by the other radio buttons
 
     list_controls_layout.addLayout(status_filter_layout)
-
     list_controls_layout.addSpacerItem(QSpacerItem(20, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
     # Category filter
@@ -116,9 +116,7 @@ def setup_main_ui(app):
     app.sort_combo.currentIndexChanged.connect(app.change_sort_mode)
     sort_controls_layout.addWidget(sort_label)
     sort_controls_layout.addWidget(app.sort_combo)
-    # sort_controls_layout.addStretch() # Push to left if needed
     sort_layout_container.addLayout(sort_controls_layout)
-    # sort_layout_container.addStretch(1) # Add stretch to push it up if space allows
 
     list_controls_layout.addLayout(sort_layout_container)
     task_area_layout.addLayout(list_controls_layout)
@@ -155,7 +153,7 @@ def setup_main_ui(app):
     button_layout.addWidget(app.logout_btn)
     task_area_layout.addLayout(button_layout)
 
-    content_layout.addLayout(task_area_layout, 1) # Task area, higher stretch factor
+    content_layout.addLayout(task_area_layout, 1)
 
     app.layout.addLayout(content_layout)
 
@@ -202,12 +200,11 @@ def create_edit_task_dialog(parent_widget, task_data):
     time_edit.setPlaceholderText("HH:MM:SS")
     
     category_combo = QComboBox()
-    category_combo.addItems(TASK_CATEGORIES + ["Other"]) # Allow "Other" or custom
+    category_combo.addItems(TASK_CATEGORIES + ["Other"]) # Allow set categories or "Other"
     current_category = task_data.get('Category', 'Personal') # Default to personal or first in list
     if current_category not in TASK_CATEGORIES and current_category:
-        category_combo.addItem(current_category) # Add if not standard, then set
+        category_combo.addItem(current_category)
     category_combo.setCurrentText(current_category)
-    category_combo.setEditable(True) # Allow typing custom categories
 
     status_combo = QComboBox()
     status_combo.addItems(["pending", "done"])
@@ -225,7 +222,7 @@ def create_edit_task_dialog(parent_widget, task_data):
     
     return dialog, {
         "desc": desc_edit, "date": date_edit, "time": time_edit,
-        "category": category_combo, "status": status_combo # Return combo for category
+        "category": category_combo, "status": status_combo
     }, btn_box
 
 
@@ -247,7 +244,7 @@ def update_calendar_display_highlights(calendar_widget, tasks_cache, highlighted
             task_status = task_data[5] 
             date_str = task_data[2]    
         except IndexError:
-            continue # Skip malformed task data
+            continue # skip malformed task data
 
         if task_status == 'pending' and date_str and date_str != 'None':
             q_task_date = QDate.fromString(date_str, 'yyyy-MM-dd')

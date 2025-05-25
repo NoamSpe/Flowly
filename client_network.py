@@ -123,10 +123,9 @@ class NetworkWorker(QObject):
         if isinstance(response, dict): final_response = response.copy()
         elif response is not None: final_response['raw_response'] = response
 
-        if action: final_response['action_echo'] = action # Add echo
+        if action: final_response['action_echo'] = action
 
         if final_response: self.response_received.emit(final_response)
-        # else: error already emitted
 
         self._request_finished.emit()
 

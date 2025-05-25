@@ -93,7 +93,7 @@ class FlowlyApp(QWidget):
 
         self.username_edit.clear()
         self.password_edit.clear()
-        self._pending_dialog = None # Clear any stale reference
+        self._pending_dialog = None
 
         self.status_label.setText("Status: Please log in or sign up.")
         result = dialog.exec_()
@@ -104,7 +104,7 @@ class FlowlyApp(QWidget):
     def attempt_login(self, dialog_instance):
         username = self.username_edit.text().strip()
         password = self.password_edit.text()
-        if not username or not password:
+        if not username or not password: # missing field or fields
             QMessageBox.warning(dialog_instance, "Input Error", "Username and password are required.")
             return
         if self.is_request_pending:
@@ -112,7 +112,7 @@ class FlowlyApp(QWidget):
             return
         self.set_busy_status("Logging in...")
         request = {'action': 'login', 'user': username, 'password': password}
-        self._pending_dialog = dialog_instance # Store reference to active dialog
+        self._pending_dialog = dialog_instance # login dialog will be closed
         self.request_network_action.emit(request)
 
     def attempt_signup(self, dialog_instance):
@@ -137,15 +137,20 @@ class FlowlyApp(QWidget):
         self._pending_dialog = dialog_instance
         self.request_network_action.emit(request)
 
+    def show_main_window(self):
+        if self.isHidden(): self.show()
+        self.raise_()
+        self.activateWindow()
+
     # --- Network Callbacks ---
     @pyqtSlot(dict)
     def handle_server_response(self, response):
-        print(f"DEBUG (FlowlyApp): UI received server response: {response}")
+        print(f"UI received server response: {response}")
         action = response.get('action_echo', 'unknown')
         status = response.get('status')
         message = response.get('message', '')
 
-        local_dialog_ref = self._pending_dialog # Capture before it's potentially cleared
+        local_dialog_ref = self._pending_dialog # Capture current dialog before it's potentially cleared
 
         if local_dialog_ref and action in ['login','signup']:
             if action == 'login':
@@ -156,9 +161,8 @@ class FlowlyApp(QWidget):
                         self.setWindowTitle(f"{APP_TITLE_BASE} - {self.logged_in_user}")
                         self.update_status_text_signal.emit(f"Status: Logged in as {self.logged_in_user}.")
                         self.show_main_window()
-                        local_dialog_ref.accept() 
-                        self.request_get_tasks() # Fetch initial tasks
-                        # update_calendar_highlights will be called by sort_and_display_tasks
+                        local_dialog_ref.accept()
+                        self.request_get_tasks() # fetch user's tasks
                     else:
                         QMessageBox.critical(local_dialog_ref, "Login Error", "Login successful, but username was not returned.")
                 else:
@@ -175,92 +179,82 @@ class FlowlyApp(QWidget):
                     QMessageBox.critical(local_dialog_ref, "Signup Failed", message or "Could not create account. Username may already exist.")
                 self._pending_dialog = None # Dialog handled
 
-        elif self.logged_in_user: # Other actions for logged-in users
+        elif self.logged_in_user: # actions for logged-in users
             if action == 'get_tasks':
                 if status == 'success':
                     self.tasks_cache = response.get('tasks', [])
                     self.sort_and_display_tasks() 
-                    if not self.is_request_pending: # Only update status if not immediately followed by another busy state
-                         self.update_status_text_signal.emit(f"Tasks loaded ({len(self.tasks_cache)}).")
+                    if not self.is_request_pending: # update status if not followed by another busy state
+                        self.update_status_text_signal.emit(f"Tasks loaded ({len(self.tasks_cache)}).")
                 else:
                     QMessageBox.warning(self, "Task Load Failed", message or "Could not retrieve tasks.")
                     self.update_status_text_signal.emit("Status: Failed to load tasks.")
             
             elif action == 'add_task':
-                if status == 'task_added': # Or a more generic 'success'
+                if status == 'task_added':
                     QMessageBox.information(self, "Success", message or "Task added successfully.")
-                    self.request_get_tasks() # Refresh list
+                    self.request_get_tasks() # refresh task list
                 else:
                     QMessageBox.warning(self, "Add Task Failed", message or "Could not add the task.")
             
             elif action == 'update_task_status':
-                if status == 'status_updated': # Or 'success'
+                if status == 'status_updated':
                     print(f"Task {response.get('task_id')} status updated successfully.")
-                    # No message box for this, just refresh the list.
-                    self.request_get_tasks()
+                    self.request_get_tasks() # refresh task list
                 else:
                     QMessageBox.warning(self, "Update Failed", message or "Could not update task status.")
-                    self.request_get_tasks() # Refresh to revert potential optimistic UI changes
+                    self.request_get_tasks() # refresh to show true list state even if ui has updated before request finished
 
             elif action == 'update_task':
-                 if status == 'task_updated': # Or 'success'
-                     QMessageBox.information(self, "Success", "Task details updated successfully.")
-                     self.request_get_tasks()
-                 else:
-                     QMessageBox.warning(self, "Update Failed", message or "Could not update task details.")
+                if status == 'task_updated':
+                    QMessageBox.information(self, "Success", "Task details updated successfully.")
+                    self.request_get_tasks()
+                else:
+                    QMessageBox.warning(self, "Update Failed", message or "Could not update task details.")
             
             elif action == 'delete_task':
-                 if status == 'task_deleted': # Or 'success'
-                     QMessageBox.information(self, "Success", f"Task deleted successfully.")
-                     self.request_get_tasks()
-                 else:
-                     QMessageBox.warning(self, "Delete Failed", message or "Could not delete the task.")
+                if status == 'task_deleted':
+                    QMessageBox.information(self, "Success", "Task deleted successfully.")
+                    self.request_get_tasks()
+                else:
+                    QMessageBox.warning(self, "Delete Failed", message or "Could not delete the task.")
             
             elif action == 'get_task' and status == 'success' and 'task' in response:
-                 # This is for fetching task details before editing
-                 if hasattr(self, '_editing_task_id') and self._editing_task_id == response['task'].get('TaskID'):
-                     self.show_edit_dialog_with_data(response['task'])
-                     # self.on_request_finished() is called after dialog closes or by network worker
-                 else:
-                     print("WARN (FlowlyApp): Received unexpected get_task details or mismatched ID.")
-                     if not self.is_request_pending and self._editing_task_id: # If we were expecting this but it was wrong
+                """For fetching task details before editing"""
+                if hasattr(self, '_editing_task_id') and self._editing_task_id == response['task'].get('TaskID'):
+                    self.show_edit_dialog_with_data(response['task'])
+                else:
+                    print("Received unexpected get_task details or mismatched ID.")
+                    if not self.is_request_pending and self._editing_task_id:
                         self.on_request_finished() # Reset busy state
-                     self._editing_task_id = None
+                    self._editing_task_id = None
             
-            # General error handling for other actions if status is not success-like
+            # General error handling for other actions if status does not indicate success
             elif status and 'success' not in status and 'updated' not in status and 'deleted' not in status and 'added' not in status:
-                 QMessageBox.warning(self, f"Action Failed ({action})", message or "An unspecified error occurred.")
-            elif 'error' in response and not status: # Generic server error
-                 QMessageBox.critical(self, "Server Error", response['error'])
+                 QMessageBox.warning(self, f"Action failed ({action})", message or "An unspecified error occurred.")
+            elif 'error' in response and not status:
+                 QMessageBox.critical(self, "Server error", response['error'])
         
-        elif not self.logged_in_user and action not in ['login', 'signup']:
-            print(f"WARN (FlowlyApp): Ignored action '{action}' response; user not logged in and not a login/signup action.")
-        
-        # If no specific handling set request_pending to false, do it in on_request_finished
-        # self.on_request_finished() will be called by the network worker signal
-
-    def show_main_window(self):
-        if self.isHidden(): self.show()
-        self.raise_()
-        self.activateWindow()
+        elif not self.logged_in_user and action not in ['login', 'signup']: # tried to perform action without login
+            print(f"Ignored action '{action}' response; user not logged in and asked for an action that's not login/signup.")
 
     @pyqtSlot(str)
     def handle_network_error(self, error_message):
-        print(f"ERROR (FlowlyApp): Network error received by UI: {error_message}")
+        print(f"Network error received by UI: {error_message}")
         active_dialog = self._pending_dialog if hasattr(self, '_pending_dialog') else self
         
-        QMessageBox.critical(active_dialog, "Network Error", 
+        QMessageBox.critical(active_dialog, "Network error", 
                              f"{error_message}\nPlease check your connection and server status.")
         
-        if self._pending_dialog: # If it was a login/signup dialog error
-            self._pending_dialog = None # Clear dialog reference as it failed
+        if self._pending_dialog: # If it was login/signup dialog error
+            self._pending_dialog = None # clear dialog reference as it failed
         
-        self.on_request_finished() # Ensure UI is re-enabled
+        self.on_request_finished() # to ensure UI is re-enabled
 
     @pyqtSlot()
     def on_request_finished(self):
-        """Called when network request cycle (send/receive) completes, successfully or with error."""
-        print("DEBUG (FlowlyApp): Network request cycle finished.")
+        """Called when a network request cycle (send/receive) completes, successfully or with error"""
+        print("Network request cycle finished.")
         self.is_request_pending = False
         self.set_controls_enabled(True) # Re-enable UI controls
 
@@ -278,14 +272,13 @@ class FlowlyApp(QWidget):
                  self.update_status_text_signal.emit(f"Status: Logged in as {self.logged_in_user}.")
             else:
                  self.update_status_text_signal.emit(f"Status: Please log in or sign up.")
-        # _editing_task_id should be cleared by the logic that initiates/handles the edit
-        # If a get_task request finishes and _editing_task_id is still set (e.g. error before dialog shown)
-        if self._editing_task_id and not self._pending_dialog: # Check _pending_dialog to avoid clearing during active dialog
-            print(f"DEBUG (FlowlyApp): Clearing _editing_task_id ({self._editing_task_id}) after request finished without edit dialog.")
+        # If get_task request finishes and _editing_task_id is still set
+        if self._editing_task_id and not self._pending_dialog: # check _pending_dialog to avoid clearing during active dialog
+            print(f"Clearing _editing_task_id ({self._editing_task_id}) after request finished without edit dialog.")
             self._editing_task_id = None
 
     # --- Task and List Management ---
-    def change_sort_mode(self, index):
+    def change_sort_mode(self):
         mode_text = self.sort_combo.currentText().lower().replace(" ", "_")
         if mode_text != self.current_sort_mode:
             self.current_sort_mode = mode_text
@@ -301,16 +294,11 @@ class FlowlyApp(QWidget):
         
         ui_sort_mode = 'due_date' if self.sort_combo.currentIndex() == 0 else 'urgency'
 
+        # for done tasks, sort is always by due date
         is_done_filter_active = self.Rstatus_done.isChecked()
-        is_all_filter_active_and_no_pending_or_done = self.Rstatus_all.isChecked() and \
-                                                    not (self.Rstatus_pending.isChecked() or self.Rstatus_done.isChecked())
-
-
-        # Enable sort_combo unless "Done" is exclusively selected or "All" is selected
-        # and implies a mix that might include "Done"
         if is_done_filter_active:
             self.sort_combo.setEnabled(False)
-            if self.sort_combo.currentIndex() != 0: self.sort_combo.setCurrentIndex(0) # Force "Due Date"
+            if self.sort_combo.currentIndex() != 0: self.sort_combo.setCurrentIndex(0) # force sorting by due date
             ui_sort_mode = 'due_date'
         else:
             self.sort_combo.setEnabled(True)
@@ -322,7 +310,7 @@ class FlowlyApp(QWidget):
         )
         self.populate_task_list(final_sorted_tasks)
         self.update_calendar_highlights()
-        self.update_task_list_label_text(final_sorted_tasks) # Renamed for clarity
+        self.update_task_list_label_text(final_sorted_tasks) # update list label with task count and sort mode
 
     def update_task_list_label_text(self, tasks_on_display):
         count = len(tasks_on_display)
@@ -334,11 +322,10 @@ class FlowlyApp(QWidget):
 
         # Determine effective sort mode for display label
         sort_display_mode = self.current_sort_mode.replace('_', ' ').title()
-        if self.Rstatus_done.isChecked(): # If "Done" filter is active, sorting is always by Due Date
+        if self.Rstatus_done.isChecked(): # # for done tasks, sort is always by due date
             sort_display_mode = "Due Date"
         
         self.task_list_label.setText(f"Showing {count} {status_info_str} ({date_info_str}) - Sorted by {sort_display_mode}")
-
 
     def populate_task_list(self, sorted_tasks_to_display):
         self.task_list.clear()
@@ -374,7 +361,8 @@ class FlowlyApp(QWidget):
             QMessageBox.warning(self, "Not Logged In", "Please log in to view tasks.")
             return
         if self.is_request_pending:
-            QMessageBox.information(self, "Busy", "Already fetching tasks. Please wait.")
+            # QMessageBox.information(self, "Busy", "Already fetching tasks. Please wait.")
+            pass
             return
         self.set_busy_status("Refreshing tasks...")
         self.request_network_action.emit({'action': 'get_tasks'})
@@ -423,7 +411,6 @@ class FlowlyApp(QWidget):
             is_done_filter_active = self.Rstatus_done.isChecked()
             self.sort_combo.setEnabled(not is_done_filter_active)
 
-
     def set_busy_status(self, message="Working..."):
         self.update_status_text_signal.emit(message)
         self.is_request_pending = True
@@ -460,22 +447,7 @@ class FlowlyApp(QWidget):
         self.sort_and_display_tasks()
 
 
-    # --- Task Actions (Add, Record, Edit, Delete) ---
-    def send_task(self):
-        task_desc = self.text_field.text().strip()
-        if not task_desc:
-            QMessageBox.warning(self, "Input Error", "Task description cannot be empty.")
-            return
-        if not self.logged_in_user:
-            QMessageBox.warning(self, "Not Logged In", "Please log in to add tasks.")
-            return
-        if self.is_request_pending:
-            QMessageBox.information(self, "Busy", "Processing another request. Please wait.")
-            return
-        self.set_busy_status("Adding task...")
-        self.request_network_action.emit({'action': 'add_task', 'task_desc': task_desc})
-        self.text_field.clear()
-
+    # --- Task Actions (Record, Add, Edit, Delete) ---
     @pyqtSlot(bool, str)
     def _handle_record_button_update(self, enabled, text):
         self.record_btn.setEnabled(enabled)
@@ -531,6 +503,21 @@ class FlowlyApp(QWidget):
             # Signal to re-enable the record button and reset its text
             self.update_record_button_signal.emit(True, "Record")
     
+    def send_task(self):
+        task_desc = self.text_field.text().strip()
+        if not task_desc:
+            QMessageBox.warning(self, "Input Error", "Task description cannot be empty.")
+            return
+        if not self.logged_in_user:
+            QMessageBox.warning(self, "Not Logged In", "Please log in to add tasks.")
+            return
+        if self.is_request_pending:
+            QMessageBox.information(self, "Busy", "Processing another request. Please wait.")
+            return
+        self.set_busy_status("Adding task...")
+        self.request_network_action.emit({'action': 'add_task', 'task_desc': task_desc})
+        self.text_field.clear()
+
     @pyqtSlot(QPoint)
     def show_task_context_menu(self, pos):
         list_item = self.task_list.itemAt(pos)
@@ -538,23 +525,18 @@ class FlowlyApp(QWidget):
         
         task_widget_instance = self.task_list.itemWidget(list_item)
         if not task_widget_instance or not hasattr(task_widget_instance, 'task_id'):
-             # Fallback to UserRole if itemWidget is not used or doesn't have task_id
+            # if itemWidget is not used or doesn't have task_id use UserRole
             task_id = list_item.data(Qt.UserRole)
             if task_id is None:
-                print("WARN (FlowlyApp): Context menu on item without TaskID.")
+                print("Context menu on item without TaskID.")
                 return
         else:
             task_id = task_widget_instance.task_id
 
-
         global_pos = self.task_list.mapToGlobal(pos)
-        menu = QMenu(self) # Parent menu to self
+        menu = QMenu(self)
         edit_action = menu.addAction("Edit Task")
         delete_action = menu.addAction("Delete Task")
-        
-        # Disable edit if task is done (already handled by TaskItemWidget, but good for context menu too)
-        # This requires fetching the task status if not readily available on task_widget_instance
-        # For simplicity, we assume TaskItemWidget's edit button enabling is sufficient visual cue.
 
         action = menu.exec_(global_pos)
         if action == edit_action:
@@ -579,13 +561,6 @@ class FlowlyApp(QWidget):
         if self.is_request_pending:
             QMessageBox.information(self, "Busy", "Cannot edit task now, another action is in progress.")
             return
-        
-        # Check if this task is 'done', if so, don't allow editing (optional, depends on desired UX)
-        # This would require finding the task in tasks_cache to check its status.
-        # for task in self.tasks_cache:
-        #     if task[0] == task_id and task[5] == 'done':
-        #         QMessageBox.information(self, "Edit Disabled", "Completed tasks cannot be edited.")
-        #         return
 
         self._editing_task_id = task_id 
         self.set_busy_status(f"Fetching task {task_id} details for editing...")
@@ -595,7 +570,7 @@ class FlowlyApp(QWidget):
         task_id_from_data = task_data.get('TaskID')
         
         if not hasattr(self, '_editing_task_id') or self._editing_task_id != task_id_from_data:
-             print(f"WARN (FlowlyApp): Mismatched task ID for edit. Expected {self._editing_task_id}, got {task_id_from_data}.")
+             print(f"Mismatched task ID for edit. Expected {self._editing_task_id}, got {task_id_from_data}.")
              self.on_request_finished() # Reset busy state
              self._editing_task_id = None
              return
@@ -605,24 +580,24 @@ class FlowlyApp(QWidget):
         btn_box.rejected.connect(dialog.reject)
         
         original_editing_task_id = self._editing_task_id # Store before clearing
-        self._editing_task_id = None # Clear flag, dialog will handle the rest or cancel
+        self._editing_task_id = None # Clear flag
 
         if dialog.exec_() == QDialog.Accepted:
             updated_desc = edit_fields['desc'].text().strip()
             if not updated_desc:
                 QMessageBox.warning(self, "Input Error", "Task description cannot be empty.")
-                self.on_request_finished() # Ensure UI is re-enabled if validation fails here
-                return 
+                self.on_request_finished() # Ensure UI re-enables if validation fails
+                return
 
             update_data = {
                 'TaskDesc': updated_desc,
-                'Date': edit_fields['date'].text().strip() or None, # Empty string becomes None
+                'Date': edit_fields['date'].text().strip() or None, # empty string becomes None
                 'Time': edit_fields['time'].text().strip() or None,
-                'Category': edit_fields['category'].currentText().strip() or "Personal", # Default if empty
+                'Category': edit_fields['category'].currentText().strip() or "Personal", # default "Personal" if empty
                 'Status': edit_fields['status'].currentText()
             }
             
-            if self.is_request_pending: # Should ideally not happen if on_request_finished was called
+            if self.is_request_pending: # Shouldn't happen if on_request_finished was called
                 QMessageBox.information(self, "Busy", "Cannot update task now, another action is in progress.")
                 return
             self.set_busy_status(f"Saving changes to task {original_editing_task_id}...")
@@ -632,11 +607,10 @@ class FlowlyApp(QWidget):
                 'update_data': update_data
             })
         else: # Dialog was cancelled or closed
-            print(f"DEBUG (FlowlyApp): Edit dialog for task {original_editing_task_id} cancelled.")
-            # Ensure request state is reset if no other request is pending
+            print(f"Edit dialog for task {original_editing_task_id} cancelled.")
+            # reset request state if no other request is pending
             if not self.is_request_pending:
                  self.on_request_finished()
-
 
     # --- Session Management ---
     def handle_logout(self):
@@ -650,55 +624,42 @@ class FlowlyApp(QWidget):
                 self.set_worker_user.emit("") 
                 
                 self.tasks_cache = []
-                self.task_list.clear() # Visually clear list
-                self.populate_task_list([]) # Show "No tasks" message
+                self.task_list.clear() # visually clear list
+                self.populate_task_list([]) # show "No tasks" message
                 self.selected_calendar_date = None
                 self.highlighted_dates.clear() 
                 if hasattr(self, 'calendar_widget'): self.update_calendar_highlights() 
                 
-                self.update_task_list_label_text([]) # Reset label with 0 tasks
+                self.update_task_list_label_text([]) # reset label with 0 tasks
                 self.setWindowTitle(APP_TITLE_BASE)
                 self.update_status_text_signal.emit("Status: Logged out successfully.")
                 
                 self.hide() 
-                QTimer.singleShot(100, self.showLogin) # Small delay before showing login
+                QTimer.singleShot(100, self.showLogin) # small delay before showing login
 
     # --- Application Exit ---
     def closeEvent(self, event):
-        print("INFO (FlowlyApp): Application close event triggered.")
-        # Ask for confirmation if user is logged in and has pending tasks (optional)
-        # if self.logged_in_user and any(task[5] == 'pending' for task in self.tasks_cache):
-        #     reply = QMessageBox.question(self, 'Confirm Exit',
-        #                                  "You have pending tasks. Are you sure you want to exit?",
-        #                                  QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        #     if reply == QMessageBox.No:
-        #         event.ignore()
-        #         return
+        print("Application close event triggered.")
         
         if self.network_thread.isRunning():
-            print("INFO (FlowlyApp): Requesting network worker to close connection...")
-            # Use invokeMethod if close_connection is a slot and worker is in another thread
-            # QMetaObject.invokeMethod(self.network_worker, "close_connection", Qt.BlockingQueuedConnection)
-            # Or ensure close_connection is thread-safe and call directly if safe.
-            # For simplicity, assuming close_connection can be called; worker uses a lock.
+            print("Requesting network worker to close connection...")
             self.network_worker.close_connection()
 
-            print("INFO (FlowlyApp): Quitting network thread...")
+            print("Quitting network thread...")
             self.network_thread.quit() 
-            if not self.network_thread.wait(3000): # Wait up to 3 seconds
-                 print("WARN (FlowlyApp): Network thread did not quit gracefully. Terminating.")
-                 self.network_thread.terminate() # Force terminate if necessary
+            if not self.network_thread.wait(3000): # wait max 3 seconds
+                 print("Network thread did not quit gracefully. Terminating.")
+                 self.network_thread.terminate() # force terminate
             else:
-                 print("INFO (FlowlyApp): Network thread stopped.")
+                 print("Network thread stopped.")
         
         event.accept()
-
 
 # --- Main Execution ---
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     
-    # Attempt to load stylesheet
+    # load stylesheet
     try:
         with open(STYLESHEET_PATH, "r") as file:
             app.setStyleSheet(file.read())
@@ -709,5 +670,4 @@ if __name__ == "__main__":
         print(f"ERROR: Could not load stylesheet '{STYLESHEET_PATH}': {e}")
 
     window = FlowlyApp()
-    # window.show() # showLogin will handle initial visibility or main window show
     sys.exit(app.exec_())

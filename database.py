@@ -27,7 +27,7 @@ class Database:
                 )
             ''')
             
-            # create Tasks table #### add status (pending/done)
+            # create Tasks table
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS Tasks (
                     TaskID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,25 +112,16 @@ class Database:
                 VALUES (?, ?)
             ''', (username, password_hash))
             conn.commit()
-            return cursor.lastrowid  # Returns the new UserID
+            return cursor.lastrowid  # returns the new UserID
 
     def get_user_by_username(self, username):
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            # Use LOWER() for case-insensitive comparison and TRIM() for whitespace
             cursor.execute("""
                 SELECT UserID, Username, PasswordHash 
                 FROM Users 
                 WHERE LOWER(TRIM(Username)) = LOWER(TRIM(?))
             """, (username,))
             result = cursor.fetchone()
-            print(f"DEBUG: User lookup for '{username}' returned: {result}")  # Debug print
+            print(f"User lookup for '{username}' returned: {result}")
             return result
-        
-    def debug_print_all_users(self):
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM Users")
-            print("DEBUG: All users in database:")
-            for row in cursor.fetchall():
-                print(row)

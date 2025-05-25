@@ -36,7 +36,7 @@ def calculate_urgency(task_data):
         if delta_hours <= 0: # Overdue or due now
             time_factor = 1.0
         else:
-            # Ensure time_factor doesn't become excessively small for very distant tasks
+            # Ensure time_factor doesn't for some reason become negative for very distant tasks
             time_factor = max(0.0, math.exp(-TIME_URGENCY_K * delta_hours))
 
 
@@ -62,7 +62,7 @@ def sort_tasks_by_mode(tasks, mode):
     return sorted_tasks
 
 def get_datetime_from_task(task_data):
-    """Helper to get a datetime object from task data for sorting, or None."""
+    """To get a datetime object from task data for sorting, or None"""
     try:
         date_str = task_data[2]
         time_str = task_data[3]
