@@ -14,7 +14,7 @@ TIME_URGENCY_K = 0.01 # exponential decay constant for time urgency
 DF_TIME = 0.1 # default time factor for tasks with no due date
 
 # --- Network
-SERVER_HOST = '10.100.102.96' # server's ip address
+SERVER_HOST = '10.100.102.112' # server's ip address
 SERVER_PORT = 4320
 
 # --- Assets

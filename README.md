@@ -1,5 +1,5 @@
-# Flowly
-Final School Software Engineering Project - NER/AI-based Task Management App - Flowly
+# About
+Final School Software Engineering Project - NER/AI-based Task Management App
 
 # Running Instructions
 1. Download the project files.

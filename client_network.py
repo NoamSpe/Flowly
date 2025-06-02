@@ -28,6 +28,7 @@ class NetworkWorker(QObject):
             try:
                 context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
                 context.load_verify_locations('server.crt')
+                context.check_hostname = False
 
                 plain_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.client_socket = context.wrap_socket(plain_sock, server_hostname=self.host) # wrap socket with SSL
