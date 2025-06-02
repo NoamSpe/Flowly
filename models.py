@@ -9,27 +9,26 @@ class BiLSTM_NER(nn.Module):
     def __init__(self, vocab_size, embedding_dim, hidden_dim, num_classes):
         
         super(BiLSTM_NER, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True, bidirectional=True)
+        self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0) # word at index 0 in the vocabulary is padding
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True, bidirectional=True) # batch first - (batch, seq, feature) instead of (seq, batch, feature)
         self.dropout = nn.Dropout(0.3)
         self.fc = nn.Linear(hidden_dim * 2, num_classes)  # BiLSTM doubles hidden size
         self.crf = CRF(num_classes)
 
     def forward(self, x, tags=None, mask=None):
         x = self.embedding(x)
-        x, _ = self.lstm(x)
+        x, _ = self.lstm(x) # _ is the hidden state
         x = self.dropout(x)
         emissions = self.fc(x)
 
         if tags is not None:  # Training
-            loss = -self.crf(emissions, tags, mask=mask)
+            loss = -self.crf(emissions, tags, mask=mask) # CRF loss is negative log likelihood
             return loss
         else:  # Prediction
             return self.crf.viterbi_decode(emissions, mask=mask)
 
 class ModelsLoader():
     def __init__(self):
-        self.model = None
         self.paths = {
             'ner_model': 'NER/NERModel.pth',
             'ner_vocabulary': 'NER/NERVocabulary.pkl',

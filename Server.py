@@ -1,7 +1,6 @@
 # Server.py
 import socket
 import threading
-from database import Database
 import json
 import pickle
 import dateparser as dp
@@ -14,6 +13,7 @@ import torch.nn as nn
 from TorchCRF import CRF
 from collections import defaultdict
 
+from database import Database
 from models import ModelsLoader
 
 # Models loading
