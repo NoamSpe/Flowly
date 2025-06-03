@@ -438,12 +438,11 @@ class FlowlyApp(QWidget):
     def handle_calendar_date_clicked(self, q_date):
         if self.is_request_pending: return
 
-        if self.selected_calendar_date == q_date:
+        if self.selected_calendar_date == q_date: # second click on the same date - clear filter
             self.selected_calendar_date = None
             self.calendar_widget.setSelectedDate(QDate()) # Visually deselect
         else:
             self.selected_calendar_date = q_date
-            # self.calendar_widget.setSelectedDate(q_date) is done by the click itself
         self.sort_and_display_tasks()
 
 
