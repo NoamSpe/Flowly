@@ -28,7 +28,7 @@ class NetworkWorker(QObject):
             try:
                 context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
                 context.load_verify_locations('server.crt')
-                context.check_hostname = False
+                # context.check_hostname = False
 
                 plain_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.client_socket = context.wrap_socket(plain_sock, server_hostname=self.host) # wrap socket with SSL
@@ -60,10 +60,10 @@ class NetworkWorker(QObject):
                 print(f"DEBUG: Sent -> {request_data}")
                 return True
             except (socket.error, OSError, BrokenPipeError, ConnectionResetError) as e:
-                print(f"ERROR: Send failed: {e}. Attempting reconnect...")
+                print(f"ERROR: Send failed: {e}. Attempting to reconnect...")
                 self.is_connected = False
                 if self.connect_socket():
-                    try:
+                    try: # retry sending after reconnection
                         message = json.dumps(request_data) + '\n'
                         self.client_socket.sendall(message.encode('utf-8'))
                         print(f"DEBUG: Sent (after retry) -> {request_data}")
@@ -88,10 +88,11 @@ class NetworkWorker(QObject):
                     if message_str:
                         try:
                             response = json.loads(message_str)
-                            print(f"DEBUG: Received <- {response}"); return response
+                            print(f"DEBUG: Received <- {response}"); return response # successfully parsed JSON and got response
                         except json.JSONDecodeError as e:
                              print(f"ERROR: JSON Decode Error: '{e}' on data: '{message_str}'")
                              self.error_occurred.emit(f"Received invalid data."); continue
+                # if message not complete, continue receiving
                 try:
                     chunk = self.client_socket.recv(4096)
                     if not chunk:

@@ -55,8 +55,7 @@ class FlowlyApp(QWidget):
         self.network_worker._request_finished.connect(self.on_request_finished)
         self.set_worker_user.connect(self.network_worker.set_current_user)
         
-        self.network_thread.started.connect(self.network_worker.connect_socket)
-        # self.network_thread.finished.connect(self.network_worker.close_connection) # Connection closed in closeEvent
+        self.network_thread.started.connect(self.network_worker.connect_socket) # connect to server when thread starts
         self.network_thread.finished.connect(self.network_thread.deleteLater) # Clean up thread
         self.network_worker.destroyed.connect(self.network_thread.quit) # If worker is deleted, quit thread
 
@@ -77,6 +76,7 @@ class FlowlyApp(QWidget):
         gui_components.setup_main_ui(self)
 
         QTimer.singleShot(0, self.showLogin) # Show login dialog after __init__ completes
+
 
     # --- Login/Signup Flow ---
     def showLogin(self):
@@ -112,7 +112,7 @@ class FlowlyApp(QWidget):
             return
         self.set_busy_status("Logging in...")
         request = {'action': 'login', 'user': username, 'password': password}
-        self._pending_dialog = dialog_instance # login dialog will be closed
+        self._pending_dialog = dialog_instance # login dialog will be closed - keep track
         self.request_network_action.emit(request)
 
     def attempt_signup(self, dialog_instance):
@@ -141,6 +141,7 @@ class FlowlyApp(QWidget):
         if self.isHidden(): self.show()
         self.raise_()
         self.activateWindow()
+
 
     # --- Network Callbacks ---
     @pyqtSlot(dict)
@@ -277,6 +278,7 @@ class FlowlyApp(QWidget):
             print(f"Clearing _editing_task_id ({self._editing_task_id}) after request finished without edit dialog.")
             self._editing_task_id = None
 
+
     # --- Task and List Management ---
     def change_sort_mode(self):
         mode_text = self.sort_combo.currentText().lower().replace(" ", "_")
@@ -362,24 +364,10 @@ class FlowlyApp(QWidget):
             return
         if self.is_request_pending:
             # QMessageBox.information(self, "Busy", "Already fetching tasks. Please wait.")
-            pass
             return
         self.set_busy_status("Refreshing tasks...")
         self.request_network_action.emit({'action': 'get_tasks'})
 
-    @pyqtSlot(int, bool)
-    def handle_task_status_change(self, task_id, is_done):
-        if self.is_request_pending:
-            print("WARN (FlowlyApp): Ignoring task status change, a request is pending.")
-            # Ideally, revert the checkbox state here or disable it during requests
-            return
-        new_status = 'done' if is_done else 'pending'
-        self.set_busy_status(f"Updating task {task_id} to {new_status}...")
-        self.request_network_action.emit({
-            'action': 'update_task_status',
-            'task_id': task_id,
-            'status': new_status
-        })
 
     # --- UI Controls State ---
     def set_controls_enabled(self, enabled):
@@ -565,6 +553,19 @@ class FlowlyApp(QWidget):
         self.set_busy_status(f"Fetching task {task_id} details for editing...")
         self.request_network_action.emit({'action': 'get_task', 'task_id': task_id})
 
+    @pyqtSlot(int, bool)
+    def handle_task_status_change(self, task_id, is_done):
+        if self.is_request_pending:
+            print("WARN (FlowlyApp): Ignoring task status change, a request is pending.")
+            return
+        new_status = 'done' if is_done else 'pending'
+        self.set_busy_status(f"Updating task {task_id} to {new_status}...")
+        self.request_network_action.emit({
+            'action': 'update_task_status',
+            'task_id': task_id,
+            'status': new_status
+        })
+
     def show_edit_dialog_with_data(self, task_data):
         task_id_from_data = task_data.get('TaskID')
         
@@ -596,7 +597,7 @@ class FlowlyApp(QWidget):
                 'Status': edit_fields['status'].currentText()
             }
             
-            if self.is_request_pending: # Shouldn't happen if on_request_finished was called
+            if self.is_request_pending:
                 QMessageBox.information(self, "Busy", "Cannot update task now, another action is in progress.")
                 return
             self.set_busy_status(f"Saving changes to task {original_editing_task_id}...")

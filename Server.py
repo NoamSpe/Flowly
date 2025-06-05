@@ -60,14 +60,14 @@ class TaskServer:
                 while True:
                     chunk = conn.recv(1024)
                     if not chunk:
-                         raise ConnectionResetError("Client disconnected")
+                        raise ConnectionResetError("Client disconnected")
                     buffer += chunk
                     # check for newline (message delimiter)
                     if b'\n' in buffer:
                         message_data, buffer = buffer.split(b'\n', 1)
                         message_str = message_data.decode('utf-8').strip()
                         if message_str: # not processing empty strings
-                             break # got a message
+                            break # got a message
                     if len(buffer) > 1024 * 10: # 10KB limit
                         print(f"Buffer exceeded limit for {addr}. Closing connection.")
                         conn.close()
