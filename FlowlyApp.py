@@ -52,7 +52,7 @@ class FlowlyApp(QWidget):
         self.request_network_action.connect(self.network_worker.process_request)
         self.network_worker.response_received.connect(self.handle_server_response)
         self.network_worker.error_occurred.connect(self.handle_network_error)
-        self.network_worker._request_finished.connect(self.on_request_finished)
+        self.network_worker.request_finished.connect(self.on_request_finished)
         self.set_worker_user.connect(self.network_worker.set_current_user)
         
         self.network_thread.started.connect(self.network_worker.connect_socket) # connect to server when thread starts
@@ -139,8 +139,8 @@ class FlowlyApp(QWidget):
 
     def show_main_window(self):
         if self.isHidden(): self.show()
-        self.raise_()
-        self.activateWindow()
+        self.raise_() # bring window to foreground, top of hidden stack
+        self.activateWindow() # focus on window
 
 
     # --- Network Callbacks ---
@@ -279,7 +279,7 @@ class FlowlyApp(QWidget):
             self._editing_task_id = None
 
 
-    # --- Task and List Management ---
+    # --- List Management ---
     def change_sort_mode(self):
         mode_text = self.sort_combo.currentText().lower().replace(" ", "_")
         if mode_text != self.current_sort_mode:
@@ -569,6 +569,7 @@ class FlowlyApp(QWidget):
     def show_edit_dialog_with_data(self, task_data):
         task_id_from_data = task_data.get('TaskID')
         
+        # Validate task ID before proceeding
         if not hasattr(self, '_editing_task_id') or self._editing_task_id != task_id_from_data:
              print(f"Mismatched task ID for edit. Expected {self._editing_task_id}, got {task_id_from_data}.")
              self.on_request_finished() # Reset busy state

@@ -8,7 +8,7 @@ import time
 class NetworkWorker(QObject):
     response_received = pyqtSignal(dict)
     error_occurred = pyqtSignal(str)
-    _request_finished = pyqtSignal()
+    request_finished = pyqtSignal()
 
     def __init__(self, host, port):
         super().__init__()
@@ -50,7 +50,7 @@ class NetworkWorker(QObject):
             if not self.is_connected or self.client_socket is None:
                 if not self.connect_socket():
                     self.error_occurred.emit("Failed to connect to server.")
-                    self._request_finished.emit(); return False
+                    self.request_finished.emit(); return False
             action = request_data.get('action')
             if self.current_user and 'user' not in request_data and action not in ['login', 'signup']:
                  request_data['user'] = self.current_user
@@ -71,15 +71,15 @@ class NetworkWorker(QObject):
                     except (socket.error, OSError) as e2:
                          print(f"ERROR: Send failed on retry: {e2}")
                          self.error_occurred.emit(f"Failed to send message: {e2}")
-                         self.is_connected = False; self._request_finished.emit(); return False
+                         self.is_connected = False; self.request_finished.emit(); return False
                 else:
                     self.error_occurred.emit("Failed to send message and reconnect.")
-                    self._request_finished.emit(); return False
+                    self.request_finished.emit(); return False
 
     def _receive_response_internal(self):
         with self.lock:
             if not self.is_connected or self.client_socket is None:
-                self.error_occurred.emit("Not connected."); self._request_finished.emit(); return None
+                self.error_occurred.emit("Not connected."); self.request_finished.emit(); return None
             start_time = time.time(); timeout = 15.0
             while True:
                 if b'\n' in self.receive_buffer:
@@ -97,17 +97,17 @@ class NetworkWorker(QObject):
                     chunk = self.client_socket.recv(4096)
                     if not chunk:
                         print("ERROR: Server closed connection."); self.error_occurred.emit("Server disconnected.")
-                        self.is_connected = False; self._request_finished.emit(); return None
+                        self.is_connected = False; self.request_finished.emit(); return None
                     self.receive_buffer += chunk
                 except socket.timeout:
                      if not self.receive_buffer and time.time() - start_time > timeout:
-                          self.error_occurred.emit("No response (timeout)."); self._request_finished.emit(); return None
+                          self.error_occurred.emit("No response (timeout)."); self.request_finished.emit(); return None
                 except (socket.error, OSError, ConnectionResetError) as e:
                      print(f"ERROR: Receive failed: {e}"); self.error_occurred.emit(f"Network error: {e}")
-                     self.is_connected = False; self._request_finished.emit(); return None
+                     self.is_connected = False; self.request_finished.emit(); return None
                 if time.time() - start_time > timeout:
                     print(f"ERROR: Overall receive timeout."); self.error_occurred.emit("Receive timeout.")
-                    self._request_finished.emit(); return None
+                    self.request_finished.emit(); return None
 
     @pyqtSlot(dict)
     def process_request(self, request_data):
@@ -129,7 +129,7 @@ class NetworkWorker(QObject):
 
         if final_response: self.response_received.emit(final_response)
 
-        self._request_finished.emit()
+        self.request_finished.emit()
 
     @pyqtSlot(str)
     def set_current_user(self, username):
