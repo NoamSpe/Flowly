@@ -8,8 +8,9 @@ Final School Software Engineering Project - NER/AI-based Task Management App
 -- on both computers
 1. Download the project files.
 2. Install the dependencies.
+3. Set up openssl ('SSL Establishment' bellow).
 --
-3. On the server's computer, adjust the ssl.conf file and regenerate the certificate and private key.
+3. On the server's computer, adjust the ssl.conf file and regenerate the certificate and private key with openssl.
 4. Modify the certificate "server.crt" on the client's computer to the newly generated certificate.
 5. Run Server.py on the host computer.
 6. Change the SERVER_HOST variable in "app_config.py" at the client's computer to the host computer's IP address, and save the file.

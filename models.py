@@ -65,10 +65,10 @@ class ModelsLoader():
     def NER_predict(self, sentence):
         print("start predicting")
         tokens = [self.vocab[word.strip().lower()] for word in sentence.split()]
-        padded = tokens + [0] * (self.MAX_SEQUENCE_LENGTH - len(tokens))
-        input_tensor = torch.tensor([padded], dtype=torch.long)
+        padded = tokens + [0] * (self.MAX_SEQUENCE_LENGTH - len(tokens)) # pad to max length
+        input_tensor = torch.tensor([padded], dtype=torch.long) # required format for input to neural network
         mask = (input_tensor != 0)
-        with torch.no_grad():
+        with torch.no_grad(): # ensure inference mode - no gradients are computed
             preds = self.NerModel(input_tensor, mask=mask)[0]  # CRF decode returns list
         return [self.idx2label[idx] for idx in preds[:len(tokens)]]
     

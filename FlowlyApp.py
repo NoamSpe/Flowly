@@ -391,7 +391,7 @@ class FlowlyApp(QWidget):
             cb.setEnabled(enabled)
         
         # Sort combo is handled specially by sort_and_display_tasks based on "Done" filter
-        # However, if all controls are disabled, sort_combo should also be.
+        # but if all controls are disabled, sort_combo should also be
         if not enabled:
             self.sort_combo.setEnabled(False)
         else:

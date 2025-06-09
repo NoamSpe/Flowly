@@ -238,7 +238,7 @@ def update_calendar_display_highlights(calendar_widget, tasks_cache, highlighted
         calendar_widget.setDateTextFormat(old_highlight_qdate, default_format)
     highlighted_dates_set.clear()
 
-    date_task_info = {} 
+    date_task_info = {} # {qdate: "overdue"/"upcoming"}
     for task_data in tasks_cache:
         try:
             task_status = task_data[5] 

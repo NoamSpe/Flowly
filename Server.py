@@ -222,9 +222,9 @@ class TaskServer:
                         if not task_id or status not in ['pending', 'done']:
                             self._send_response(conn, {'status': 'error', 'message': 'Invalid task ID or status', 'action_echo':'update_task_status'})
                             continue
-                        # Verify ownership before updating
-                        task_info = self.db.get_task(task_id) # Fetch task to check UserID
-                        if task_info and task_info[1] == current_user_id: # Assuming UserID is in index 1
+                        # verify ownership before updating
+                        task_info = self.db.get_task(task_id) # fetch task to check UserID
+                        if task_info and task_info[1] == current_user_id: # task's UserID is in index 1
                            self.db.update_task_status(task_id, status)
                            self._send_response(conn, {'status': 'status_updated', 'task_id': task_id, 'new_status': status, 'action_echo':'update_task_status'})
                         elif task_info:
@@ -249,8 +249,8 @@ class TaskServer:
                             except Exception as e:
                                 print(f"ERROR: Updating task {task_id} failed: {e}")
                                 self._send_response(conn, {'status':'error', 'message':f'Error updating task: {e}', 'action_echo':'update_task'})
-                        elif task_info:
-                            print(f"WARN: User {current_user_id} tried to update task {task_id} owned by {task_info[1]} from {addr}")
+                        elif task_info: #task not owned by current user
+                            print(f"User {current_user_id} tried to update task {task_id} owned by {task_info[1]} from {addr}")
                             self._send_response(conn, {'status':'error', 'message':'Unauthorized: You do not own this task', 'action_echo':'update_task'})
                         else:
                             self._send_response(conn, {'status': 'error', 'message': 'Task not found', 'action_echo':'update_task'})
@@ -265,20 +265,20 @@ class TaskServer:
                         if task_info and task_info[1] == current_user_id: # Check UserID at index 1
                             self.db.delete_task(task_id)
                             self._send_response(conn, {'status':'task_deleted', 'task_id': task_id, 'action_echo':'delete_task'})
-                        elif task_info:
-                            print(f"WARN: User {current_user_id} tried to delete task {task_id} owned by {task_info[1]} from {addr}")
+                        elif task_info: #task not owned by current user
+                            print(f"User {current_user_id} tried to delete task {task_id} owned by {task_info[1]} from {addr}")
                             self._send_response(conn, {'status':'error', 'message':'Unauthorized: You do not own this task', 'action_echo':'delete_task'})
                         else:
                             self._send_response(conn, {'status': 'error', 'message': 'Task not found', 'action_echo':'delete_task'})
 
-                    elif action == 'get_task': # for fetching details for edit form
+                    elif action == 'get_task': # fetching details for edit form
                         task_id = request.get('task_id')
                         if not task_id:
                              self._send_response(conn, {'status':'error', 'message':'Task ID required', 'action_echo':'get_task'})
                              continue
                         task_info = self.db.get_task(task_id)
                         if task_info and task_info[1] == current_user_id: # Check UserID at index 1
-                             # Convert tuple to dict for easier client handling
+                             # Convert tuple to dict for client handling
                              task_dict = {
                                 'TaskID': task_info[0],
                                 'UserID': task_info[1],
@@ -289,7 +289,7 @@ class TaskServer:
                                 'Status': task_info[6]
                              }
                              self._send_response(conn, {'status': 'success', 'task': task_dict, 'action_echo':'get_task'})
-                        elif task_info:
+                        elif task_info: # task not owned by current user
                              self._send_response(conn, {'status':'error', 'message':'Unauthorized', 'action_echo':'get_task'})
                         else:
                              self._send_response(conn, {'status': 'error', 'message': 'Task not found', 'action_echo':'get_task'})
@@ -308,7 +308,7 @@ class TaskServer:
         except (ssl.SSLError, ConnectionResetError, BrokenPipeError) as e:
             print(f"Client {addr} SSL/connection error: {e}")
         except Exception as e:
-            print(f"ERROR: Unhandled exception in client handler for {addr}: {e}")
+            print(f"Unhandled exception for {addr}: {e}")
             # Try sending a generic error if possible
             try:
                 self._send_response(conn, {'status':'error','message':'An unexpected server error occurred.'})
@@ -322,7 +322,7 @@ class TaskServer:
                     print(f"Error closing SSL socket for {addr}: {e}")
             # remove active user entry if they were logged in
             if current_username and current_username in self.active_users:
-                 # Check if the stored user_id matches the one for this session before deleting
+                 # check if the stored user_id matches the one for this session before deleting
                  if self.active_users[current_username] == current_user_id:
                     del self.active_users[current_username]
                     print(f"User '{current_username}' logged out from {addr}.")

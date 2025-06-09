@@ -9,7 +9,7 @@ def calculate_urgency(task_data):
         # TaskID, TaskDesc, DateStr, TimeStr, Category, Status
         _, _, date_str, time_str, category, _ = task_data
     except (ValueError, IndexError): # Handle cases where task_data might not have 6 elements
-        print(f"WARN: Could not unpack task data for urgency calculation: {task_data}")
+        print(f"WARN (task_logic): Could not unpack task data for urgency calculation: {task_data}")
         return 0
 
     now = datetime.datetime.now()
@@ -18,16 +18,16 @@ def calculate_urgency(task_data):
     if date_str and date_str != 'None':
         try:
             parsed_date = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
-            parsed_time = datetime.time.min
+            parsed_time = datetime.time.min # 00:00:00 as default time
             if time_str and time_str != 'None':
                 try:
                     time_str_clean = time_str.split('.')[0]
                     parsed_time = datetime.datetime.strptime(time_str_clean, '%H:%M:%S').time()
                 except ValueError:
-                    print(f"WARN: Invalid time format '{time_str}', using 00:00:00")
+                    print(f"WARN (task_logic): Invalid time format '{time_str}', using 00:00:00")
             due_datetime = datetime.datetime.combine(parsed_date, parsed_time)
         except ValueError:
-            print(f"WARN: Invalid date format '{date_str}', cannot determine due date.")
+            print(f"WARN (task_logic): Invalid date format '{date_str}', cannot determine due date.")
 
     time_factor = DF_TIME
     if due_datetime:
@@ -40,7 +40,7 @@ def calculate_urgency(task_data):
             time_factor = max(0.0, math.exp(-TIME_URGENCY_K * delta_hours))
 
 
-    category_factor = CATEGORY_FACTORS.get(category, CATEGORY_FACTORS["_default_"]) if category else CATEGORY_FACTORS["_default_"]
+    category_factor = CATEGORY_FACTORS.get(category or "_default_", CATEGORY_FACTORS["_default_"])
     urgency_score = (DTIME_WEIGHT * time_factor) + (CATEGORY_WEIGHT * category_factor)
     return urgency_score
 
